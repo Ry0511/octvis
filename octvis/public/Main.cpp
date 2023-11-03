@@ -10,7 +10,8 @@
 #include "backends/imgui_impl_sdl2.h"
 #include "backends/imgui_impl_opengl3.h"
 
-//#include "gl/GL.h"
+#include "gl/glew.h"
+#include "gl/GL.h"
 
 int main() {
 
@@ -21,6 +22,9 @@ int main() {
     std::cout << "Initialisation\n";
     SDL_Init(SDL_INIT_EVERYTHING);
     ImGui::CreateContext();
+    if (glewInit() != GLEW_OK) {
+        std::cout << "[EXPECTED] glewInit() failed\n";
+    }
     ImGui::DestroyContext();
     SDL_Quit();
     std::cout << "Termination\n";

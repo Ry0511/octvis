@@ -10,3 +10,7 @@
 	path = vendor/imgui
 	url = https://github.com/Ry0511/imgui
 	branch = stable-docking
+[submodule "vendor/glew"]
+	path = vendor/glew
+	url = https://github.com/Perlmint/glew-cmake
+	branch = glew-cmake-release

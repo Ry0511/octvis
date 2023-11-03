@@ -2,6 +2,11 @@ cmake_minimum_required(VERSION 3.23)
 project(vendor_libs VERSION 0.0.0 DESCRIPTION "")
 set(CMAKE_CXX_STANDARD 20)
 
+# - NOTE -
+# If not using vendor libraries it assumes that vcpkg conventions are used. It is best to avoid
+# using a package manager if you do not want to modify the CMake files to get things working.
+#
+
 ################################################################################
 # OPEN GL
 ################################################################################
@@ -9,11 +14,43 @@ set(CMAKE_CXX_STANDARD 20)
 # - NOTE -
 # OpenGL is system dependent and should be provided by the OS
 #
+# - NOTE -
+# This is just to expose a custom opengl target for convenience and single point management.
+#
 
-# TODO: Add GLEW
-# TODO: Add custom OpenGL target.
 find_package(OpenGL REQUIRED)
-#target_link_libraries(foo PRIVATE OpenGL::GL)
+add_library(octvis_opengl INTERFACE)
+target_link_libraries(octvis_opengl INTERFACE OpenGL::GL)
+
+################################################################################
+# GLEW
+################################################################################
+
+option(OCTVIS_USE_VENDOR_GLEW "Use the vendor glew target" ON)
+
+if (NOT OCTVIS_USE_VENDOR_GLEW)
+    find_package(GLEW REQUIRED)
+    # target_link_libraries(main PRIVATE GLEW::GLEW)
+
+    if (NOT TARGET GLEW::GLEW)
+        message(FATAL_ERROR "Found GLEW but the target GLEW::GLEW was not found...")
+    endif ()
+
+else ()
+    add_subdirectory(glew)
+
+    set_target_properties( # We want GLEW to build into our output directories
+            libglew_shared libglew_static
+            PROPERTIES
+            ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/lib
+            LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+            RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+    )
+
+    add_library(GLEW::GLEW ALIAS libglew_shared)
+    add_library(GLEW::GLEW_static ALIAS libglew_static)
+
+endif ()
 
 ################################################################################
 # GLM CMAKE TARGET
@@ -118,7 +155,7 @@ else ()
 
     target_include_directories(imgui PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/imgui")
     target_link_libraries(imgui PRIVATE SDL2::SDL2 PRIVATE SDL2::SDL2main)
-    target_link_libraries(imgui PRIVATE OpenGL::GL)
+    target_link_libraries(imgui PRIVATE octvis_opengl)
 
     # Allow linking with 'imgui' and 'imgui::imgui'
     add_library(imgui::imgui ALIAS imgui)
