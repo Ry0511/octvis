@@ -26,3 +26,9 @@ add_executable(
         ${octvis_HEADER_FILES}
         ${octvis_SOURCE_FILES}
 )
+
+find_package(OpenGL REQUIRED)
+target_link_libraries(${PROJECT_NAME} PRIVATE glm::glm)
+target_link_libraries(${PROJECT_NAME} PRIVATE OpenGL::GL)
+target_link_libraries(${PROJECT_NAME} PRIVATE SDL2::SDL2 PRIVATE SDL2::SDL2main)
+target_link_libraries(${PROJECT_NAME} PRIVATE imgui::imgui)
