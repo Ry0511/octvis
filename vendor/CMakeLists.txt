@@ -153,7 +153,10 @@ else ()
 
     add_library(imgui STATIC ${OCTVIS_IMGUI_SOURCES})
 
-    target_include_directories(imgui PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/imgui")
+    target_include_directories(imgui
+            PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/imgui"
+            PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/imgui/backends"
+    )
     target_link_libraries(imgui PRIVATE SDL2::SDL2 PRIVATE SDL2::SDL2main)
     target_link_libraries(imgui PRIVATE octvis_opengl)
 
