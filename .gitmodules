@@ -6,3 +6,7 @@
 	path = vendor/sdl2
 	url = https://github.com/libsdl-org/SDL
 	branch = SDL2
+[submodule "vendor/imgui"]
+	path = vendor/imgui
+	url = https://github.com/Ry0511/imgui
+	branch = stable-docking
