@@ -1,0 +1,16 @@
+[submodule "vendor/glm"]
+	path = vendor/glm
+	url = https://github.com/Groovounet/glm
+	branch = release
+[submodule "vendor/sdl2"]
+	path = vendor/sdl2
+	url = https://github.com/libsdl-org/SDL
+	branch = SDL2
+[submodule "vendor/imgui"]
+	path = vendor/imgui
+	url = https://github.com/Ry0511/imgui
+	branch = stable-docking
+[submodule "vendor/glew"]
+	path = vendor/glew
+	url = https://github.com/Perlmint/glew-cmake
+	branch = glew-cmake-release
