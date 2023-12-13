@@ -61,30 +61,6 @@ int main(int, char**) {
         style.Colors[ImGuiCol_WindowBg].w = 1.0f;
     }
 
-    style.WindowBorderSize = 0.0F;
-    style.WindowRounding = 0.0F;
-    style.TabBorderSize = 0.0F;
-    style.TabMinWidthForCloseButton = 0.0F;
-
-    style.Colors[ImGuiCol_WindowBg] = ImVec4{};
-    style.Colors[ImGuiCol_Tab] = ImVec4{};
-    style.Colors[ImGuiCol_TabActive] = ImVec4{};
-    style.Colors[ImGuiCol_TabUnfocused] = ImVec4{};
-    style.Colors[ImGuiCol_TabHovered] = ImVec4{};
-    style.Colors[ImGuiCol_TabUnfocusedActive] = ImVec4{};
-
-    // style.Colors[ImGuiCol_FrameBg] = ImVec4{};
-    // style.Colors[ImGuiCol_FrameBgHovered] = ImVec4{};
-    // style.Colors[ImGuiCol_FrameBgActive] = ImVec4{};
-
-    style.Colors[ImGuiCol_MenuBarBg] = ImVec4{};
-
-    style.Colors[ImGuiCol_TitleBg] = ImVec4{};
-    style.Colors[ImGuiCol_TitleBgActive] = ImVec4{};
-    style.Colors[ImGuiCol_TitleBgCollapsed] = ImVec4{};
-
-    style.Colors[ImGuiCol_Border] = ImVec4{ 0.0F, 0.0F, 0.0F, 0.0F };
-
     // Setup Platform/Renderer backends
     ImGui_ImplSDL2_InitForOpenGL(window, gl_context);
     ImGui_ImplOpenGL3_Init(glsl_version);
