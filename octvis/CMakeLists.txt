@@ -10,6 +10,7 @@ set(PROJECT_NAME "octvis")
 
 set(
         octvis_HEADER_FILES
+        public/Logging.h # Could be in private
 )
 
 set(
@@ -26,6 +27,8 @@ add_executable(
         ${octvis_HEADER_FILES}
         ${octvis_SOURCE_FILES}
 )
+
+target_include_directories(${PROJECT_NAME} PUBLIC public PRIVATE private)
 
 target_link_libraries(${PROJECT_NAME} PRIVATE glm::glm)
 target_link_libraries(${PROJECT_NAME} PRIVATE GLEW::GLEW)
