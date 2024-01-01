@@ -4,10 +4,6 @@
 // If you are new to Dear ImGui, read documentation from the docs/ folder + read the top of imgui.cpp.
 // Read online: https://github.com/ocornut/imgui/tree/master/docs
 
-//
-// TODO: Integrate the RawImage with stb_image with a bit more cohesiveness and abstractness.
-//
-
 #include "Logging.h"
 
 #include "Renderer.h"
