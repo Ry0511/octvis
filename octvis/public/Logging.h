@@ -20,7 +20,7 @@
 
 namespace _octvis_logging {
 
-    std::string get_time_formatted(const char* fmt = "%H:%M:%S") {
+    inline std::string get_time_formatted(const char* fmt = "%H:%M:%S") {
 
         using Clock = std::chrono::system_clock;
         std::time_t current_time = Clock::to_time_t(Clock::now());
@@ -46,7 +46,7 @@ namespace _octvis_logging {
 
 #define OCTVIS_LOG(level, out, msg)              \
     out << std::format(                          \
-        "{:<8} | {} | {}\n",                     \
+        "{:^8} | {} | {}\n",                     \
         level,                                   \
         ::_octvis_logging::get_time_formatted(), \
         msg                                      \
@@ -58,9 +58,11 @@ namespace _octvis_logging {
 #define OCTVIS_ERROR(msg, ...) OCTVIS_LOG("ERROR", std::cout, std::vformat(msg, std::make_format_args(__VA_ARGS__)))
 #define OCTVIS_DEBUG(msg, ...) OCTVIS_LOG("DEBUG", std::cout, std::vformat(msg, std::make_format_args(__VA_ARGS__)))
 
+#if defined(OCTVIS_ENABLE_ASSERTIONS)
+
 #define OCTVIS_ASSERT(predicate, msg, ...)         \
     do {                                           \
-        ::_octvis_logging::check_assertion(         \
+        ::_octvis_logging::check_assertion(        \
             !!(predicate),                         \
             std::vformat(                          \
                 msg,                               \
@@ -73,8 +75,12 @@ namespace _octvis_logging {
         );                                         \
     } while (false)
 
+#else
+#define OCTVIS_ASSERT(predicate, msg, ...)
+#endif
+
 namespace _octvis_logging {
-    void check_assertion(
+    inline void check_assertion(
             bool predicate,
             std::string msg,
             const char* predicate_str,
@@ -98,7 +104,7 @@ namespace _octvis_logging {
                             line
                     )
             );
-            assert(false);
+            std::terminate();
         }
     }
 }
