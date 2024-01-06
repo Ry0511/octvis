@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.26)
 project(octvis)
 
 set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 ################################################################################
 # Output Directories & Windows Symbols
@@ -15,6 +16,8 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 ################################################################################
 # SUB DIRECTORIES
 ################################################################################
+
+enable_testing()
 
 add_subdirectory(vendor)
 add_subdirectory(octvis)

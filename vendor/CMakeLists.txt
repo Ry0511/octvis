@@ -8,21 +8,6 @@ set(CMAKE_CXX_STANDARD 20)
 #
 
 ################################################################################
-# OPEN GL
-################################################################################
-
-# - NOTE -
-# OpenGL is system dependent and should be provided by the OS
-#
-# - NOTE -
-# This is just to expose a custom opengl target for convenience and single point management.
-#
-
-find_package(OpenGL REQUIRED)
-add_library(octvis_opengl INTERFACE)
-target_link_libraries(octvis_opengl INTERFACE OpenGL::GL)
-
-################################################################################
 # GLEW
 ################################################################################
 
@@ -59,8 +44,8 @@ endif ()
 # - SOURCE -
 # Vendor Link: https://github.com/Groovounet/glm
 
-# Since GLM is a header only library we have to interface.
-# We only need to know where the glm header files are.
+# Since GLM is a header only library we have to interface we only need to know where the glm
+#  header files are.
 
 # Note: Warning C5033 exists in GLM when compiling with later versions.
 
@@ -81,8 +66,8 @@ else ()
     target_include_directories(
             glm
             INTERFACE
-            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/glm/glm>
-            $<INSTALL_INTERFACE:include>
+            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/glm>
+            $<INSTALL_INTERFACE:glm>
     )
 
     # Lets you link to glm using both 'glm' and 'glm::glm' targets
@@ -98,7 +83,6 @@ option(OCTVIS_USE_VENDOR_SDL2 "Use the vendored glm target" ON)
 
 if (NOT ${OCTVIS_USE_VENDOR_SDL2})
     find_package(SDL2 REQUIRED CONFIG REQUIRED COMPONENTS SDL2)
-    find_package(SDL2 REQUIRED CONFIG COMPONENTS SDL2main)
 
 else ()
 
@@ -110,8 +94,8 @@ else ()
     endif ()
 
     add_subdirectory(sdl2 EXCLUDE_FROM_ALL)
-    if (NOT TARGET SDL2::SDL2 OR NOT TARGET SDL2::SDL2main)
-        message(FATAL_ERROR "Failed to find SDL2 CMake targets 'SDL2::SDL2' and SDL2::SDL2main")
+    if (NOT TARGET SDL2::SDL2)
+        message(FATAL_ERROR "Failed to find SDL2 CMake target 'SDL2::SDL2'")
     endif ()
 
 endif ()
@@ -157,10 +141,20 @@ else ()
             PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/imgui"
             PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/imgui/backends"
     )
-    target_link_libraries(imgui PRIVATE SDL2::SDL2 PRIVATE SDL2::SDL2main)
-    target_link_libraries(imgui PRIVATE octvis_opengl)
+    target_link_libraries(imgui PRIVATE SDL2::SDL2)
+
+    find_package(OpenGL REQUIRED)
+    target_link_libraries(imgui PRIVATE OpenGL::GL)
 
     # Allow linking with 'imgui' and 'imgui::imgui'
     add_library(imgui::imgui ALIAS imgui)
 
 endif ()
+
+################################################################################
+# STB
+################################################################################
+
+add_library(stb_image INTERFACE)
+target_sources(stb_image INTERFACE stb/stb_image.h)
+target_include_directories(stb_image INTERFACE stb)
