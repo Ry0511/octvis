@@ -45,12 +45,18 @@ target_include_directories(${PROJECT_NAME} PUBLIC public PRIVATE private)
 target_compile_definitions(${PROJECT_NAME} PUBLIC OCTVIS_ENABLE_ASSERTIONS)
 target_compile_definitions(${PROJECT_NAME} PUBLIC OCTVIS_ENABLE_LOGGING)
 
-target_link_libraries(${PROJECT_NAME} PRIVATE glm::glm)
-target_link_libraries(${PROJECT_NAME} PRIVATE GLEW::GLEW_static)
+target_link_libraries(${PROJECT_NAME} PUBLIC glm::glm)
+target_link_libraries(${PROJECT_NAME} PUBLIC GLEW::GLEW_static)
 
 find_package(OpenGL REQUIRED)
-target_link_libraries(${PROJECT_NAME} PRIVATE OpenGL::GL)
+target_link_libraries(${PROJECT_NAME} PUBLIC OpenGL::GL)
 
-target_link_libraries(${PROJECT_NAME} PRIVATE SDL2::SDL2)
-target_link_libraries(${PROJECT_NAME} PRIVATE imgui::imgui)
-target_link_libraries(${PROJECT_NAME} PRIVATE stb_image)
+target_link_libraries(${PROJECT_NAME} PUBLIC SDL2::SDL2)
+target_link_libraries(${PROJECT_NAME} PUBLIC imgui::imgui)
+target_link_libraries(${PROJECT_NAME} PUBLIC stb_image)
+
+################################################################################
+# TESTS
+################################################################################
+
+add_subdirectory(tests)
