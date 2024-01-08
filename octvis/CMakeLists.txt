@@ -54,6 +54,7 @@ target_link_libraries(${PROJECT_NAME} PUBLIC OpenGL::GL)
 target_link_libraries(${PROJECT_NAME} PUBLIC SDL2::SDL2)
 target_link_libraries(${PROJECT_NAME} PUBLIC imgui::imgui)
 target_link_libraries(${PROJECT_NAME} PUBLIC stb_image)
+target_link_libraries(${PROJECT_NAME} PUBLIC EnTT::EnTT)
 
 ################################################################################
 # TESTS

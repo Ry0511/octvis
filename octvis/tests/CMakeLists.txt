@@ -16,6 +16,10 @@ add_library(${PROJECT_NAME} STATIC)
 get_target_property(OCTVIS_SOURCES octvis SOURCES)
 set(ABSOLUTE_OCTVIS_SOURCES "")
 foreach (RELATIVE_PATH ${OCTVIS_SOURCES})
+    if (RELATIVE_PATH MATCHES ".*Main\.cpp")
+        continue()
+    endif ()
+
     get_filename_component(
             ABSOLUTE_PATH "${RELATIVE_PATH}"
             ABSOLUTE BASE_DIR "../"

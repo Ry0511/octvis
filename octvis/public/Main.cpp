@@ -19,6 +19,8 @@ using namespace octvis::renderer;
 
 #include "SDL.h"
 
+#include "entt/entt.hpp"
+
 void* initialise();
 void update(void*, float);
 void render(void*);
@@ -78,6 +80,18 @@ int main(int, char**) {
     frame_timing.resize(frame_timing_size, 0.0F);
     size_t index = 0;
     double fps = -1.0F;
+
+    entt::registry registry{};
+    for (int i = 0; i < 10; ++i) {
+        auto id = registry.create();
+        registry.emplace<float>(id, (float) i);
+    }
+
+    registry.view<float>().each(
+            [](entt::entity id, float x) {
+                OCTVIS_TRACE("{} => {:.2f}", (std::uint32_t) id, x);
+            }
+    );
 
     bool is_running = true;
     while (is_running) {
