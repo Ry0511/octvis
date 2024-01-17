@@ -1,272 +1,154 @@
 
-// Dear ImGui: standalone example application for SDL2 + OpenGL
-// (SDL is a cross-platform general purpose library for handling windows, inputs, OpenGL/Vulkan/Metal graphics context creation, etc.)
-// If you are new to Dear ImGui, read documentation from the docs/ folder + read the top of imgui.cpp.
-// Read online: https://github.com/ocornut/imgui/tree/master/docs
-
 #include "Logging.h"
+#include "Context.h"
+#include "Application.h"
 
-#include "Renderer.h"
-#include "glm/gtc/matrix_transform.hpp"
-
-//
-// Plan for branch merge.
-//
-
+using namespace octvis;
 using namespace octvis::renderer;
 
-#define SDL_MAIN_HANDLED
+class TestApp : public Application {
 
-#include "SDL.h"
+  public:
+    struct RenderState {
+        glm::mat4 projection, view, model;
+    };
 
-#include "entt/entt.hpp"
+    struct RenderContext {
+        ShaderProgram m_Program;
+        RenderState m_RenderState;
+        Buffer m_RenderStateBuffer{ BufferType::UNIFORM };
+        VertexArrayObject m_Vao;
+    };
 
-void* initialise();
-void update(void*, float);
-void render(void*);
-void cleanup(void*);
+  private:
+    Camera m_Camera;
+    std::unique_ptr<RenderContext> m_RenderContext{ nullptr };
 
-int main(int, char**) {
-    // Setup SDL
-    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0) {
-        OCTVIS_ERROR("Error: {}", SDL_GetError());
-        return -1;
-    }
+  public:
+    TestApp() : Application("Test App") {}
 
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 5);
+  public:
+    virtual void on_start() noexcept override {
+        OCTVIS_TRACE("Test App Starting!");
 
-    // Create window with graphics context
-    SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
-    SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
-    SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
-    SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 1);
-    SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 8);
-    SDL_WindowFlags window_flags = (SDL_WindowFlags) (
-            SDL_WINDOW_OPENGL
-            | SDL_WINDOW_RESIZABLE
-            | SDL_WINDOW_ALLOW_HIGHDPI
-    );
-    SDL_Window* window = SDL_CreateWindow(
-            "Octvis",
-            SDL_WINDOWPOS_CENTERED,
-            SDL_WINDOWPOS_CENTERED,
-            800,
-            600,
-            window_flags
-    );
-    SDL_GLContext gl_context = SDL_GL_CreateContext(window);
-    SDL_GL_MakeCurrent(window, gl_context);
-    SDL_GL_SetSwapInterval(1);
+        m_RenderContext = std::make_unique<RenderContext>();
 
-    if (glewInit() != GLEW_OK) {
-        OCTVIS_ERROR("Failed to initialise GLEW.");
-        return -1;
-    }
+        m_RenderContext->m_Program.init();
+        {
+            Shader vertex{ ShaderType::VERTEX };
+            vertex.load_from_path("resources/VertexShader_UBO.glsl");
+            m_RenderContext->m_Program.attach_shader(vertex);
 
-    void* state = initialise();
+            Shader fragment{ ShaderType::FRAGMENT };
+            fragment.load_from_path("resources/FragmentShader.glsl");
+            m_RenderContext->m_Program.attach_shader(fragment);
 
-    using Clock = std::chrono::high_resolution_clock;
-    using Instant = Clock::time_point;
-
-    Instant start;
-    Instant end;
-    float delta = 0.0F;
-
-    constexpr size_t frame_timing_size = 1024;
-    std::vector<float> frame_timing{};
-    frame_timing.reserve(frame_timing_size);
-    frame_timing.resize(frame_timing_size, 0.0F);
-    size_t index = 0;
-    double fps = -1.0F;
-
-    entt::registry registry{};
-    for (int i = 0; i < 10; ++i) {
-        auto id = registry.create();
-        registry.emplace<float>(id, (float) i);
-    }
-
-    registry.view<float>().each(
-            [](entt::entity id, float x) {
-                OCTVIS_TRACE("{} => {:.2f}", (std::uint32_t) id, x);
-            }
-    );
-
-    bool is_running = true;
-    while (is_running) {
-
-        if (index == frame_timing_size - 1) {
-            index = 0;
-
-            double sum = 0.0;
-            for (float& t : frame_timing) {
-                sum += t;
-                t = 0.0F;
-            }
-            fps = (double{ 1.0F } * double{ frame_timing_size }) / sum;
-            OCTVIS_TRACE("Average FPS over {} updates {:.3f}", frame_timing_size, fps);
-            frame_timing.resize(frame_timing_size, 0.0F);
+            m_RenderContext->m_Program.link();
         }
 
-        start = Clock::now();
+        m_Camera.set_position(glm::vec3{ 0, 0, -5 });
+        m_Camera.look_at(glm::vec3{ 0, 0, 0 });
+        m_RenderContext->m_RenderState.projection = m_Camera.get_projection();
+        m_RenderContext->m_RenderState.view = m_Camera.get_view_matrix();
+        m_RenderContext->m_RenderState.model = glm::scale(glm::mat4{ 1 }, glm::vec3{ 0.8F, 0.8F, 0.8F });
+        m_RenderContext->m_RenderStateBuffer.init<RenderState>(
+                1, &m_RenderContext->m_RenderState, BufferUsage::DYNAMIC
+        );
 
-        SDL_Event event{};
-        while (SDL_PollEvent(&event)) {
-            if (event.type == SDL_QUIT) {
-                is_running = false;
-            }
-        }
+        RenderableModel model_;
+        model_.load_triangle();
+        // RenderableModel& model = m_Context->emplace_model(std::move(model_));
+
+        m_RenderContext->m_Vao.init();
+        model_.attach_buffer_to_vao(m_RenderContext->m_Vao, 0);
+        m_RenderContext->m_Vao.unbind();
+
+    }
+
+    virtual void on_update() noexcept override {
+
+        std::string title = std::format(
+                "{} :: {:.3f}, {:.5f}, {}, {:.5f}, {}; ( {:2f}, {:2f}, {:2f} ), ( {:2f}, {:2f}, {:2f} )",
+                m_AppName,
+                m_Timing->theta,
+                m_Timing->delta,
+                m_Timing->delta_ticks,
+                m_Timing->fixed,
+                m_Timing->fixed_ticks,
+
+                m_Camera.get_rotate().x,
+                m_Camera.get_rotate().y,
+                m_Camera.get_rotate().z,
+
+                m_Camera.get_position().x,
+                m_Camera.get_position().y,
+                m_Camera.get_position().z
+        );
+        SDL_SetWindowTitle(m_Window->handle, title.c_str());
 
         int width, height;
-        SDL_GetWindowSize(window, &width, &height);
-
+        SDL_GetWindowSize(m_Window->handle, &width, &height);
         glViewport(0, 0, width, height);
-        glClearColor(0.2F, 0.2F, 0.2F, 1.0F);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        m_Context->clear();
 
-        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-        glLineWidth(1.0F);
+        // Moving Around
+        float vel = 5.0F * m_Timing->delta;
+        if (InputSystem::is_key_pressed(SDLK_w)) m_Camera.translate_forward(vel);
+        if (InputSystem::is_key_pressed(SDLK_s)) m_Camera.translate_forward(-vel);
+        if (InputSystem::is_key_pressed(SDLK_a)) m_Camera.translate_horizontal(-vel);
+        if (InputSystem::is_key_pressed(SDLK_d)) m_Camera.translate_horizontal(vel);
 
-        std::string title = std::format("Octvis :: {:.2f}, {}, {:.3f}ms", fps, (size_t) (1.0F / delta), delta);
-        SDL_SetWindowTitle(window, title.c_str());
+        glm::vec3 pos = m_Camera.get_position();
+        pos.y = 0.0F;
+        m_Camera.set_position(pos);
 
-        update(state, delta);
-        render(state);
+        // Capture Mouse
+        static bool is_relative_mode = false;
+        if (InputSystem::is_key_released(SDLK_ESCAPE)) {
+            is_relative_mode = !is_relative_mode;
+            SDL_SetRelativeMouseMode(is_relative_mode ? SDL_TRUE : SDL_FALSE);
+        }
 
-        SDL_GL_SwapWindow(window);
+        // Looking Around
+        if (is_relative_mode) {
+            glm::vec2 mvel = InputSystem::get_mouse_vel() * 3.0F * m_Timing->delta;
+            m_Camera.look(mvel);
+        }
 
-        end = Clock::now();
-        delta = std::chrono::duration<float>(end - start).count();
+        static bool is_movement_xz = false;
+        if (InputSystem::is_key_released(SDLK_1)) {
+            is_movement_xz = !is_movement_xz;
+            m_Camera.set_move_xz(is_movement_xz);
+        }
 
-        frame_timing[index] = delta;
-        ++index;
+        if (InputSystem::is_key_released(SDLK_r)) m_Camera.look_at(glm::vec3{ 0 });
+
+        RenderState* state = static_cast<RenderState*>(m_RenderContext->m_RenderStateBuffer.create_mapping());
+        state->view = m_Camera.get_view_matrix();
+        m_RenderContext->m_RenderStateBuffer.release_mapping();
+
+        m_RenderContext->m_Vao.bind();
+        m_RenderContext->m_Program.activate();
+        m_RenderContext->m_Program.set_ubo(m_RenderContext->m_RenderStateBuffer, 0, "render_state");
+        glDrawArrays(GL_TRIANGLES, 0, 3);
+        m_RenderContext->m_Vao.unbind();
+        m_RenderContext->m_Program.deactivate();
+
+        m_Context->swap_buffers();
     }
 
-    cleanup(state);
+    virtual void on_fixed_update() noexcept override {
+    }
 
+    virtual void on_finish() noexcept override {
+        OCTVIS_TRACE("Test App Finished!");
+    }
+
+};
+
+int main(int, char**) {
+    Context ctx{};
+    ctx.emplace_app<TestApp>();
+    if (!ctx.start()) return -1;
     return 0;
-}
-
-//############################################################################//
-// |  |
-//############################################################################//
-
-struct Vertex {
-    glm::vec3 position;
-    glm::vec3 normal;
-    glm::vec3 colour;
-    glm::vec2 tex_coord;
-};
-
-struct RenderState {
-    Buffer vertex_buffer{ BufferType::ARRAY };
-    Buffer uniform_buffer{ BufferType::UNIFORM };
-    ShaderProgram shader_program{};
-    VertexArrayObject vao{};
-    Texture2D texture{};
-};
-
-struct UniformState {
-    glm::mat4 projection;
-    glm::mat4 view;
-    glm::mat4 model;
-};
-
-void* initialise() {
-
-    RenderState* state = new RenderState{};
-
-    // @off
-    Vertex vertices[]{
-            { glm::vec3{  0.00F,  1.00F,  0.00F }, glm::vec3{ 0.0F, 0.0F, 0.0F }, glm::vec3{ 0.0F, 0.0F, 1.0F }, glm::vec2{ 0.5F, 1.0F } },
-            { glm::vec3{ -1.00F, -1.00F,  0.00F }, glm::vec3{ 0.0F, 0.0F, 0.0F }, glm::vec3{ 0.0F, 1.0F, 0.0F }, glm::vec2{ 0.0F, 0.0F } },
-            { glm::vec3{  1.00F, -1.00F,  0.00F }, glm::vec3{ 0.0F, 0.0F, 0.0F }, glm::vec3{ 1.0F, 0.0F, 0.0F }, glm::vec2{ 1.0F, 0.0F } },
-    };
-    // @on
-
-    state->vertex_buffer.init(3, vertices, BufferUsage::STATIC);
-
-    UniformState ubo{
-            glm::perspective(90.0F, 16.0F / 9.0F, 0.1F, 100.0F),
-            glm::lookAt(glm::vec3{ 0, 0, -1 }, glm::vec3{ 0, 0, 0 }, glm::vec3{ 0, 1, 0 }),
-            glm::scale(glm::mat4{ 1 }, glm::vec3{ 0.8F, 0.8F, 0.8F })
-    };
-    state->uniform_buffer.init(1, &ubo, BufferUsage::DYNAMIC);
-
-    state->shader_program.init();
-    {
-        Shader vertex{ ShaderType::VERTEX };
-        vertex.load_from_path(
-                "G:\\University\\Year 4\\CSP400\\Project\\octvis\\octvis\\resources\\VertexShader_UBO.glsl"
-        );
-        state->shader_program.attach_shader(vertex);
-
-        Shader fragment{ ShaderType::FRAGMENT };
-        fragment.load_from_path(
-                "G:\\University\\Year 4\\CSP400\\Project\\octvis\\octvis\\resources\\FragmentShader.glsl"
-        );
-        state->shader_program.attach_shader(fragment);
-
-        state->shader_program.link();
-    }
-
-    state->vao.init();
-    state->vao.bind();
-    state->vao.attach_buffer(state->vertex_buffer)
-         .add_interleaved_attributes<glm::vec3, glm::vec3, glm::vec3, glm::vec2>(0);
-    state->vao.unbind();
-
-    // Load Image
-    RawImage img{};
-    img.format = ColourFormat::RGBA;
-    img.pixel_type = PixelType::UBYTE;
-    img.load_from_path("G:\\University\\Year 4\\CSP400\\Project\\octvis\\octvis\\resources\\Untitled.png");
-
-    // Init Texture
-    state->texture.init(img);
-
-    return state;
-}
-
-void update(void* ptr, float delta) {
-
-    RenderState* state = static_cast<RenderState*>(ptr);
-
-    UniformState* uniforms = static_cast<UniformState*>(state->uniform_buffer.create_mapping());
-
-    static float theta = 0.0F;
-    theta += delta * 2.0F;
-    if (theta >= 3.1415f * 2.0F) theta = 0.0F;
-
-    float radius = 2.0F;
-
-    glm::vec3 pos{
-            radius * std::cos(theta),
-            radius * std::sin(theta) + std::cos(theta),
-            radius * std::sin(theta),
-    };
-
-    uniforms->view = glm::lookAt(pos, glm::vec3{ 0, 0, 0 }, glm::vec3{ 0, 1, 0 });
-
-    state->uniform_buffer.release_mapping();
-}
-
-void render(void* ptr) {
-
-    RenderState* state = static_cast<RenderState*>(ptr);
-
-    state->vao.bind();
-    state->shader_program.activate();
-    state->shader_program.set_ubo(state->uniform_buffer, 0, "render_state");
-    state->shader_program.set_texture(state->texture, 0, "img");
-    glDrawArrays(GL_TRIANGLES, 0, 3);
-
-    state->shader_program.deactivate();
-    state->vao.unbind();
-
-}
-
-void cleanup(void* ptr) {
-    delete static_cast<RenderState*>(ptr);
 }
