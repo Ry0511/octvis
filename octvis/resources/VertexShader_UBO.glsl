@@ -2,8 +2,8 @@
 
 layout (location = 0) in vec3 vertex;
 layout (location = 1) in vec3 normal;
-layout (location = 2) in vec3 colour;
-layout (location = 3) in vec2 tex;
+layout (location = 2) in vec2 tex;
+layout (location = 3) in vec4 colour;
 
 layout(std140) uniform render_state {
     mat4 projection;
@@ -11,7 +11,7 @@ layout(std140) uniform render_state {
     mat4 model;
 };
 
-out vec3 col;
+out vec4 col;
 out vec2 tex_coord;
 
 void main() {

@@ -13,6 +13,10 @@ set(
 
         public/Logging.h # Could be in private
         public/Renderer.h
+        public/Camera.h
+        public/Application.h
+        public/Context.h
+        public/InputSystem.h
 )
 
 set(
@@ -20,6 +24,9 @@ set(
 
         public/Main.cpp
         private/Renderer.cpp
+        private/Camera.cpp
+        private/Context.cpp
+        private/InputSystem.cpp
 )
 
 ################################################################################
