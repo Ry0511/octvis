@@ -123,6 +123,18 @@ class TestApp : public Application {
 
         if (InputSystem::is_key_released(SDLK_r)) m_Camera.look_at(glm::vec3{ 0 });
 
+        ImGui::DockSpaceOverViewport(nullptr, ImGuiDockNodeFlags_PassthruCentralNode);
+        if (ImGui::Begin("Application Timings")) {
+            ImGui::Text("Theta              %4f", m_Timing->theta);
+            ImGui::Text("Delta              %4f", m_Timing->delta);
+            ImGui::Text("Fixed              %4f", m_Timing->fixed);
+            ImGui::Text("Delta Ticks        %llu", m_Timing->delta_ticks);
+            ImGui::Text("Fixed Ticks        %llu", m_Timing->fixed_ticks);
+            ImGui::Text("Fixed Update Theta %4f", m_Timing->fixed_update_total_time);
+            ImGui::Text("Delta Update Theta %4f", m_Timing->update_total_time);
+        }
+        ImGui::End();
+
         RenderState* state = static_cast<RenderState*>(m_RenderContext->m_RenderStateBuffer.create_mapping());
         state->view = m_Camera.get_view_matrix();
         m_RenderContext->m_RenderStateBuffer.release_mapping();
@@ -133,8 +145,6 @@ class TestApp : public Application {
         glDrawArrays(GL_TRIANGLES, 0, 3);
         m_RenderContext->m_Vao.unbind();
         m_RenderContext->m_Program.deactivate();
-
-        m_Context->swap_buffers();
     }
 
     virtual void on_fixed_update() noexcept override {

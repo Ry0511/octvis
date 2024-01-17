@@ -6,6 +6,9 @@
 
 #include "Context.h"
 
+#include "imgui_impl_sdl2.h"
+#include "imgui_impl_opengl3.h"
+
 #include "Application.h"
 
 #include <fstream>
@@ -269,6 +272,28 @@ int octvis::Context::initialise_systems() noexcept {
             (const char*) glGetString(GL_VERSION)
     );
 
+    // Initialise ImGui
+    IMGUI_CHECKVERSION();
+    OCTVIS_TRACE("Initialising ImGui");
+    m_ImGuiContext = ImGui::CreateContext();
+    ImGuiIO& io = ImGui::GetIO();
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
+    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+    io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
+    ImGui::StyleColorsDark();
+
+    // Multiple Viewports
+    ImGuiStyle& style = ImGui::GetStyle();
+    if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
+        style.WindowRounding = 0.0f;
+        style.Colors[ImGuiCol_WindowBg].w = 1.0f;
+    }
+
+    // Initialise Backend
+    ImGui_ImplSDL2_InitForOpenGL(m_Window.handle, m_Window.gl_context);
+    ImGui_ImplOpenGL3_Init("#version 450");
+
     return 0;
 }
 
@@ -277,6 +302,11 @@ void octvis::Context::terminate_systems() noexcept {
     // These need to be deleted first
     m_Applications.clear();
     m_Models.clear();
+
+    // Terminate ImGui
+    ImGui_ImplOpenGL3_Shutdown();
+    ImGui_ImplSDL2_Shutdown();
+    ImGui::DestroyContext(m_ImGuiContext);
 
     // Now we can destroy the context & window
     SDL_GL_DeleteContext(m_Window.gl_context);
@@ -351,6 +381,11 @@ void octvis::Context::start_update_loop() noexcept {
         // Handle Events
         process_events();
 
+        // Prepare ImGui Frame
+        ImGui_ImplOpenGL3_NewFrame();
+        ImGui_ImplSDL2_NewFrame();
+        ImGui::NewFrame();
+
         // Perform Fixed Update Ticks
         Instant update_instant = Clock::now();
         while (fixed_accumulator > m_Timing.fixed) {
@@ -368,6 +403,21 @@ void octvis::Context::start_update_loop() noexcept {
             m_Applications[i]->on_update();
         }
         m_Timing.update_total_time = FloatDuration{ Clock::now() - update_instant }.count();
+
+        // Render ImGui
+        ImGui::Render();
+        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
+        // Update Viewports
+        if (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
+            SDL_Window* backup_current_window = SDL_GL_GetCurrentWindow();
+            SDL_GLContext backup_current_context = SDL_GL_GetCurrentContext();
+            ImGui::UpdatePlatformWindows();
+            ImGui::RenderPlatformWindowsDefault();
+            SDL_GL_MakeCurrent(backup_current_window, backup_current_context);
+        }
+
+        SDL_GL_SwapWindow(m_Window.handle);
 
         before = after;
     }
@@ -392,7 +442,18 @@ void octvis::Context::process_events() noexcept {
     m_InputSystem.reset();
     while (SDL_PollEvent(&event)) {
 
+        ImGui_ImplSDL2_ProcessEvent(&event);
+
+        // Standard Quit Condition
         if (event.type == SDL_QUIT) {
+            stop();
+            return;
+        }
+
+        // ImGui Specific Quit Condition
+        if (event.type == SDL_WINDOWEVENT
+            && event.window.event == SDL_WINDOWEVENT_CLOSE
+            && event.window.windowID == SDL_GetWindowID(m_Window.handle)) {
             stop();
             return;
         }
