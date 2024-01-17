@@ -30,12 +30,33 @@ namespace octvis::renderer {
     }
 
     Buffer::~Buffer() {
+        if (m_BufferID == INVALID_ID) return;
+        if (m_MappedData != nullptr) release_mapping();
+
+        OCTVIS_TRACE(
+                "Deleting Buffer '{}, {:#06x}, {:#06x}, {:#06x}'",
+                m_BufferID,
+                (GLenum) m_Type,
+                (GLenum) m_Usage,
+                m_SizeInBytes
+        );
+        GL_CALL(glDeleteBuffers(1, &m_BufferID));
     }
 
-    Buffer::Buffer(Buffer&&) {
+    Buffer::Buffer(Buffer&& other) {
+        std::swap(m_BufferID, other.m_BufferID);
+        std::swap(m_Type, other.m_Type);
+        std::swap(m_Usage, other.m_Usage);
+        std::swap(m_SizeInBytes, other.m_SizeInBytes);
+        std::swap(m_MappedData, other.m_MappedData);
     }
 
-    Buffer& Buffer::operator =(Buffer&&) {
+    Buffer& Buffer::operator =(Buffer&& other) {
+        std::swap(m_BufferID, other.m_BufferID);
+        std::swap(m_Type, other.m_Type);
+        std::swap(m_Usage, other.m_Usage);
+        std::swap(m_SizeInBytes, other.m_SizeInBytes);
+        std::swap(m_MappedData, other.m_MappedData);
         return *this;
     }
 
@@ -79,6 +100,7 @@ namespace octvis::renderer {
         OCTVIS_TRACE("Buffer Data ( {}, {:p}, {:#06x} )", bytes, data, (GLenum) usage);
         GL_CALL(glBufferData(get_type(), bytes, data, (GLenum) usage));
         m_Usage = usage;
+        m_SizeInBytes = bytes;
         unbind();
     }
 
