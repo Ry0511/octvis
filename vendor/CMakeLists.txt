@@ -70,6 +70,13 @@ else ()
             $<INSTALL_INTERFACE:glm>
     )
 
+    # Disable warning C5033: 'register' is no longer a supported storage class
+    if (MSVC)
+        target_compile_options(glm INTERFACE "/wd5033")
+    elseif (MINGW)
+        target_compile_options(glm INTERFACE "-Wno-register")
+    endif()
+
     # Lets you link to glm using both 'glm' and 'glm::glm' targets
     add_library(glm::glm ALIAS glm)
 
