@@ -67,7 +67,7 @@ void octvis::Camera::look(const glm::vec3& dt) noexcept {
 }
 
 void octvis::Camera::look(const glm::vec2& dt) noexcept {
-    m_Rotate += glm::vec3{ dt, 0.0F };
+    m_Rotate += glm::vec3{ dt.x, dt.y, 0.0F };
     normalise_rotation();
     compute_view_matrix();
 }

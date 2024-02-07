@@ -30,28 +30,6 @@ namespace octvis {
 
     class Application;
 
-    struct Vertex {
-        glm::vec3 pos, normal;
-        glm::vec2 tex_pos;
-        glm::vec4 colour;
-    };
-
-    struct RenderableModel {
-        std::string model_name;
-        std::vector<Vertex> vertices;
-        renderer::Buffer buffer{ renderer::BufferType::ARRAY };
-
-      public:
-        int load_from_obj(const char* path) noexcept;
-        void load_triangle() noexcept;
-        void load_rect() noexcept;
-        void load_cube() noexcept;
-
-      public:
-        void upload_to_buffer() noexcept;
-        void attach_buffer_to_vao(renderer::VertexArrayObject& vao, size_t index) noexcept;
-    };
-
     //############################################################################//
     // | STATEFUL CONTEXT INFO |
     //############################################################################//
@@ -97,7 +75,6 @@ namespace octvis {
       private:
         entt::registry m_Registry;
         std::vector<std::unique_ptr<Application>> m_Applications;
-        std::unordered_map<std::string, RenderableModel> m_Models;
         bool m_IsApplicationRunning;
 
       public:
@@ -116,12 +93,6 @@ namespace octvis {
             static_assert(std::is_base_of_v<Application, T>, "T must derive Application");
             auto& app = m_Applications.emplace_back(std::make_unique<T>(std::forward<Args>(args)...));
             add_app_impl(*app);
-        }
-
-        inline RenderableModel& emplace_model(RenderableModel&& model) noexcept {
-            auto it = m_Models.emplace(model.model_name, std::move(model));
-            OCTVIS_ASSERT(it.second, "Failed to emplace '{}'", it.first->first);
-            return it.first->second;
         }
 
       public:

@@ -17,6 +17,8 @@ set(
         public/Application.h
         public/Context.h
         public/InputSystem.h
+        public/RenderApplication.h
+        public/WavefrontReader.h
 )
 
 set(
@@ -27,6 +29,8 @@ set(
         private/Camera.cpp
         private/Context.cpp
         private/InputSystem.cpp
+        private/RenderApplication.cpp
+        private/WavefrontReader.cpp
 )
 
 ################################################################################

@@ -174,7 +174,7 @@ namespace octvis {
     }
 
     glm::vec2 InputSystem::get_mouse_vel() noexcept {
-        auto pos = s_System->m_MousePosition;
+        const auto& pos = s_System->m_MousePosition;
         return glm::vec2{ pos.xrel, pos.yrel };
     }
 

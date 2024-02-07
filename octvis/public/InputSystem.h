@@ -63,10 +63,10 @@ namespace octvis {
     class InputSystem {
 
       private: // @off
-        using KeyState              = std::variant<KeyPressed, KeyReleased>;
-        using KeyStateMap           = std::unordered_map<int, KeyState>;
-        using MouseButtonState      = std::variant<MousePressed, MouseReleased>;
-        using MouseButtonStateMap   = std::unordered_map<int, MouseButtonState>;
+        using KeyState            = std::variant<KeyPressed, KeyReleased>;
+        using KeyStateMap         = std::unordered_map<int, KeyState>;
+        using MouseButtonState    = std::variant<MousePressed, MouseReleased>;
+        using MouseButtonStateMap = std::unordered_map<int, MouseButtonState>;
 
       private:
         friend class Context;

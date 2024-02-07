@@ -134,7 +134,7 @@ namespace octvis {
             };
 
             // Converting Degrees to Radians
-            constexpr auto to_radians = [](float degrees) -> float {
+            constexpr auto to_radians = [](double degrees) -> double {
                 return degrees * (PI / 180.0F);
             };
 

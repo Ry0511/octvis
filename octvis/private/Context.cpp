@@ -11,174 +11,6 @@
 
 #include "Application.h"
 
-#include <fstream>
-#include <filesystem>
-#include <sstream>
-
-namespace fs = std::filesystem;
-
-//############################################################################//
-// | VERTEX & MODEL | Should be in their own file tbh
-//############################################################################//
-
-int octvis::RenderableModel::load_from_obj(const char* path_str) noexcept {
-
-    fs::path path(path_str);
-
-    if (!fs::exists(path)) {
-        OCTVIS_WARN("File '{}' does not exist.", path_str);
-        return -1;
-    }
-
-    // Filename excludes file extension
-    model_name = path.stem().string();
-
-    // Read File into a string
-    using Iter = std::istreambuf_iterator<char>;
-    std::fstream stream{ path };
-    if (!stream || !stream.is_open()) {
-        OCTVIS_ERROR("Filestream error occurred on file '{}'", path_str);
-        return -1;
-    }
-    std::string content{ Iter{ stream }, Iter{} };
-
-    // Init Variables & Process File
-    vertices.resize(32);
-    std::vector<glm::vec3> vertices_(32);
-    std::vector<glm::vec3> normals_(32);
-    std::vector<glm::vec2> tex_pos_(32);
-    std::stringstream content_stream{ std::move(content) };
-
-    std::string line{};
-    line.reserve(256);
-    while (content_stream >> line) {
-
-        std::stringstream line_stream{ line };
-        char id[2]{};
-        Vertex vertex{};
-
-        if (!(line_stream >> id)) continue;
-
-        // Checks if the id is the provided
-        constexpr auto is = [](char id[2], const char* val) -> bool {
-            return (id[0] == val[0]) && (id[1] == val[1]);
-        };
-
-        // Parse Vertex
-        if (is(id, "v ")) {
-            glm::vec3 vec{};
-            if (line_stream >> vec.x >> vec.y >> vec.z) {
-                vertices_.push_back(vec);
-            } else {
-                OCTVIS_ERROR("OBJ Reading failed to parse vertex on input '{}'", line);
-                return -1;
-            }
-
-            // Parse Texture Position
-        } else if (is(id, "vt")) {
-            glm::vec2 vt{};
-            if (line_stream >> vt.x >> vt.y) {
-                tex_pos_.push_back(vt);
-            } else {
-                OCTVIS_ERROR("OBJ Reading failed to parse vertex texture on input '{}'", line);
-                return -1;
-            }
-
-            // Parse Vertex Normal
-        } else if (is(id, "vn")) {
-            glm::vec3 vec{};
-            if (line_stream >> vec.x >> vec.y >> vec.z) {
-                vertices_.push_back(vec);
-            } else {
-                OCTVIS_ERROR("OBJ Reading failed to parse vertex normal on input '{}'", line);
-                return -1;
-            }
-
-            // Parse Face (We assume a triangle)
-        } else if (is(id, "f ")) {
-            char c; // this is used to eat separator chars
-            glm::ivec3 vec[3]{};
-            Vertex triangle[3]{};
-
-            for (int i = 0; i < 3; ++i) {
-                if (line_stream >> vec[i].x >> c >> vec[i].y >> c >> vec[i].z) {
-                    vec[i] -= glm::ivec3{ 1 }; // Obj uses 1 Based Indexing
-                    triangle[i] = Vertex{
-                            .pos     = vertices_[vec[i].x],
-                            .normal  = normals_[vec[i].y],
-                            .tex_pos = tex_pos_[vec[i].z],
-                            .colour  = glm::vec4{ 1 },
-                    };
-                } else {
-                    OCTVIS_ERROR("OBJ Reading failed to parse vertex face on input '{}'", line);
-                    return -1;
-                }
-            }
-
-            vertices.push_back(triangle[0]);
-            vertices.push_back(triangle[1]);
-            vertices.push_back(triangle[2]);
-        }
-
-    }
-
-    vertices.shrink_to_fit();
-    upload_to_buffer();
-
-    return 0;
-}
-
-void octvis::RenderableModel::load_triangle() noexcept {
-
-    model_name = "Triangle";
-    vertices.resize(3);
-
-    // @off
-    vertices[0] = Vertex{
-            .pos     = glm::vec3{ -1.0F, -1.0F, 0.0F },
-            .normal  = glm::vec3{ 0.0F, 0.0F, 1.0F   },
-            .tex_pos = glm::vec2{ 0.0F, 0.0F         },
-            .colour  = glm::vec4{ 1                  }
-    };
-
-    vertices[1] = Vertex{
-            .pos     = glm::vec3{ 1.0F, -1.0F, 0.0F },
-            .normal  = glm::vec3{ 0.0F,  0.0F, 1.0F },
-            .tex_pos = glm::vec2{ 1.0F,  0.0F       },
-            .colour  = glm::vec4{ 1                 }
-    };
-
-    vertices[2] = Vertex{
-            .pos     = glm::vec3{ 0.0F, 1.0F, 0.0F },
-            .normal  = glm::vec3{ 0.0F, 0.0F, 1.0F },
-            .tex_pos = glm::vec2{ 0.5F, 1.0F       },
-            .colour  = glm::vec4{ 1                }
-    };
-    // @on
-
-    upload_to_buffer();
-}
-
-void octvis::RenderableModel::load_rect() noexcept {
-
-}
-
-void octvis::RenderableModel::load_cube() noexcept {
-
-}
-
-void octvis::RenderableModel::upload_to_buffer() noexcept {
-    buffer.init<Vertex>(vertices.size(), vertices.data(), renderer::BufferUsage::STATIC);
-}
-
-void octvis::RenderableModel::attach_buffer_to_vao(
-        octvis::renderer::VertexArrayObject& vao,
-        size_t index
-) noexcept {
-    vao.attach_buffer(buffer)
-       .add_interleaved_attributes<glm::vec3, glm::vec3, glm::vec2, glm::vec4>(index);
-}
-
 //############################################################################//
 // | APPLICATION CONTEXT |
 //############################################################################//
@@ -301,7 +133,6 @@ void octvis::Context::terminate_systems() noexcept {
 
     // These need to be deleted first
     m_Applications.clear();
-    m_Models.clear();
 
     // Terminate ImGui
     ImGui_ImplOpenGL3_Shutdown();
@@ -377,6 +208,8 @@ void octvis::Context::start_update_loop() noexcept {
         m_Timing.delta = FloatDuration{ after - before }.count();
         fixed_accumulator += m_Timing.delta;
         ++m_Timing.delta_ticks;
+
+        SDL_GetWindowSize(m_Window.handle, &m_Window.width, &m_Window.height);
 
         // Handle Events
         process_events();

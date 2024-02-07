@@ -68,7 +68,9 @@ namespace octvis::renderer {
         ARRAY   = GL_ARRAY_BUFFER,
         ELEMENT = GL_ELEMENT_ARRAY_BUFFER,
         UNIFORM = GL_UNIFORM_BUFFER,
-        SSBO    = GL_SHADER_STORAGE_BUFFER
+        SSBO    = GL_SHADER_STORAGE_BUFFER,
+
+        DRAW_INDIRECT = GL_DRAW_INDIRECT_BUFFER
     };
 
     enum class BufferUsage : GLenum {
@@ -115,6 +117,13 @@ namespace octvis::renderer {
         inline GLenum id() const noexcept {
             return m_BufferID;
         }
+        inline size_t size_bytes() const noexcept {
+            return m_SizeInBytes;
+        }
+        template<class T>
+        inline size_t count() const noexcept {
+            return m_SizeInBytes / sizeof(T);
+        }
 
       public:
         inline bool is_array_buffer() const noexcept {
@@ -139,8 +148,14 @@ namespace octvis::renderer {
         bool is_bound() const;
         void init_raw(size_t bytes, const void* const data, BufferUsage usage);
         void set_range(size_t start_bytes, const void* const data, size_t size_bytes) const;
+        void copy_from_raw(const Buffer& other, size_t begin_bytes, size_t size_bytes, size_t write_start) const;
         void* create_mapping(BufferMapping mode = BufferMapping::READ_WRITE);
         void release_mapping();
+
+        template<class T>
+        inline T* create_mapping(BufferMapping mode = BufferMapping::READ_WRITE) noexcept {
+            return static_cast<T*>(create_mapping(mode));
+        }
 
       public:
         template<class T>
@@ -162,6 +177,125 @@ namespace octvis::renderer {
                 );
             }
         }
+
+        template<class T>
+        inline void copy_from(
+                const Buffer& other,
+                size_t start,
+                size_t count,
+                size_t write_start = 0
+        ) const {
+            constexpr size_t S = sizeof(T);
+            copy_from_raw(other, S * start, S * count, S * write_start);
+        }
+    };
+
+    //############################################################################//
+    // | DYNAMIC BUFFER |
+    //############################################################################//
+
+    template<class T>
+    class DynamicBuffer : private Buffer {
+
+      private:
+        size_t m_Tail; // Current End Index
+        size_t m_Size; // Current Buffer Size in T units
+
+      public:
+        DynamicBuffer(BufferType type = BufferType::ARRAY) : Buffer(type), m_Tail(0), m_Size(0) {}
+        ~DynamicBuffer() = default;
+
+      public: // Expose Some Buffer functions
+        using Buffer::bind;
+        using Buffer::unbind;
+        using Buffer::get_type;
+        using Buffer::get_usage;
+        using Buffer::create_mapping;
+        using Buffer::release_mapping;
+
+      public:
+        // The actual length being used
+        inline size_t length() const noexcept {
+            return m_Tail;
+        }
+
+        // The allocated length of the buffer
+        inline size_t size() const noexcept {
+            return m_Size;
+        }
+
+      private:
+        inline void realloc(size_t count) {
+            std::vector<T> vec = to_vec();
+
+            // Realloc & Copy Original Data
+            Buffer::init<T>(count, nullptr, BufferUsage::DYNAMIC);
+            Buffer::set_range(0, vec.data(), vec.size());
+
+            m_Size = count;
+            m_Tail = vec.size();
+        }
+        inline static size_t get_size_large_enough(const size_t size) noexcept {
+            size_t s = 1;
+            while (s <= size) s <<= 1;
+            return s;
+        }
+
+      public:
+        inline std::vector<T> to_vec() {
+            if (length() == 0) return std::vector<T>{};
+            T* ptr = Buffer::create_mapping<T>();
+            OCTVIS_ASSERT(ptr != nullptr, "Failed to create buffer mapping!");
+            std::vector<T> vec(ptr, ptr + m_Tail);
+            Buffer::release_mapping();
+            return vec;
+        }
+        inline void reserve(size_t min) {
+            if (min < size()) return;
+            size_t next_size = get_size_large_enough(min);
+            realloc(next_size);
+        }
+        inline void clear() {
+            m_Tail = 0; // Reset Tail
+        }
+        inline bool empty() const noexcept {
+            return m_Tail == 0 || m_Size == 0;
+        }
+
+      public:
+        inline void insert(const T* const data, size_t count) {
+            size_t required_size = m_Tail + count;
+            if (required_size > m_Size) {
+                realloc(get_size_large_enough(required_size));
+            }
+
+            Buffer::set_range(m_Tail, data, count);
+            m_Tail += count;
+        }
+        inline void insert(const T* const begin, const T* end) {
+            insert(begin, std::distance(begin, end));
+        }
+
+      public: // Insert at an index
+        inline void insert(size_t begin, const T* const data, size_t count) {
+            OCTVIS_ASSERT((begin + count) <= size(), "Index range {} to {} is out of bounds", begin, count);
+            Buffer::set_range<T>(begin, data, count);
+        }
+        inline void copy_from(const DynamicBuffer<T>& other, size_t start, size_t count, size_t index = 0) const {
+            Buffer::copy_from<T>(other, start, count, index);
+        }
+
+      public:
+        template<class Fn>
+        inline void for_each(Fn&& fn) noexcept {
+            T* ptr = Buffer::create_mapping<T>();
+            T* end = ptr + length();
+            for (; ptr != end; ++ptr) {
+                std::invoke(std::forward<Fn>(fn), *ptr);
+            }
+            Buffer::release_mapping();
+        }
+
     };
 
     //############################################################################//
@@ -211,7 +345,6 @@ namespace octvis::renderer {
         inline bool valid() const noexcept {
             return pixel_data != nullptr && width > 0 && height > 0;
         }
-
         inline std::string to_string() const noexcept {
             return std::vformat(
                     "{}, {:#06x}, {:#06x}, {}, {}, {:p}",
@@ -225,7 +358,6 @@ namespace octvis::renderer {
                     )
             );
         }
-
         inline const void* const data() const noexcept {
             return static_cast<const void* const>(pixel_data);
         }
@@ -376,6 +508,20 @@ namespace octvis::renderer {
         void link();
 
       public:
+        inline void create(const char* vertex, const char* fragment) {
+            Shader v{ ShaderType::VERTEX };
+            v.load_from_path(vertex);
+
+            Shader f{ ShaderType::FRAGMENT };
+            f.load_from_path(fragment);
+
+            init();
+            attach_shader(v);
+            attach_shader(f);
+            link();
+        }
+
+      public:
         bool is_valid() const noexcept;
         void activate() const;
         void deactivate() const;
@@ -448,8 +594,8 @@ namespace octvis::renderer {
         else if constexpr (std::is_same_v<T, glm::vec4>) return 4;
 
             // Matrices
-        // else if constexpr (std::is_same_v<T, glm::mat2>) return 2; // 2x2
-        // else if constexpr (std::is_same_v<T, glm::mat3>) return 3; // 3x3
+            // else if constexpr (std::is_same_v<T, glm::mat2>) return 2; // 2x2
+            // else if constexpr (std::is_same_v<T, glm::mat3>) return 3; // 3x3
         else if constexpr (std::is_same_v<T, glm::mat4>) return 4; // 4x4
 
             // Unknown Count
@@ -496,6 +642,20 @@ namespace octvis::renderer {
         }
     };
 
+    template<class T>
+    struct VertexAttributeSlotCount {
+        constexpr static int value = 1;
+    };
+
+    //
+    // MAT4
+    //
+
+    template<>
+    struct VertexAttributeSlotCount<glm::mat4> {
+        constexpr static int value = 4;
+    };
+
     template<>
     struct VertexAttribute<glm::mat4> {
         using index_t = unsigned int;
@@ -532,14 +692,44 @@ namespace octvis::renderer {
         }
     };
 
-    template<class T>
-    struct VertexAttributeSlotCount {
-        constexpr static int value = 1;
+    //
+    // MAT3
+    //
+
+    template<>
+    struct VertexAttributeSlotCount<glm::mat3> {
+        constexpr static int value = 3;
     };
 
     template<>
-    struct VertexAttributeSlotCount<glm::mat4> {
-        constexpr static int value = 4;
+    struct VertexAttribute<glm::mat3> {
+        using index_t = unsigned int;
+
+        constexpr void create(
+                index_t index,
+                bool normalise = false,
+                size_t stride = 0,
+                const void* ptr = (const void*) 0
+        ) const {
+            if (stride == 0) stride = sizeof(glm::mat4);
+            size_t offset = (size_t) ptr;
+            constexpr VertexAttribute<glm::vec3> attributes[3]{};
+            attributes[0].create(index + 0, normalise, stride, (void*) (offset + sizeof(glm::vec3) * 0));
+            attributes[1].create(index + 1, normalise, stride, (void*) (offset + sizeof(glm::vec3) * 1));
+            attributes[2].create(index + 2, normalise, stride, (void*) (offset + sizeof(glm::vec3) * 2));
+        };
+
+        constexpr void enable(index_t index, bool enabled = true) const {
+            if (enabled) {
+                glEnableVertexAttribArray(index + 0);
+                glEnableVertexAttribArray(index + 1);
+                glEnableVertexAttribArray(index + 2);
+            } else {
+                glDisableVertexAttribArray(index + 0);
+                glDisableVertexAttribArray(index + 1);
+                glDisableVertexAttribArray(index + 2);
+            }
+        }
     };
 
     //############################################################################//
@@ -574,6 +764,14 @@ namespace octvis::renderer {
 
       public: // Returns Self for chaining
         VertexArrayObject& attach_buffer(const Buffer& buffer);
+
+        template<class T>
+        VertexArrayObject& attach_buffer(const DynamicBuffer<T>& buffer) {
+            if (!is_bound()) bind();
+            buffer.bind();
+            return *this;
+        };
+
         VertexArrayObject& enable_attribute(index_t index, bool is_enabled = true);
         VertexArrayObject& enable_attribute_range(index_t begin, index_t end, bool is_enabled = true);
         VertexArrayObject& set_divisor(index_t index, index_t divisor);
