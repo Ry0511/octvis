@@ -44,11 +44,14 @@ add_executable(
 )
 
 # Copies 'octvis/resources' into 'bin/resources' for relative pathing
+add_custom_target(octvis_copy_resources ALL)
+
 add_custom_command(
-        TARGET ${PROJECT_NAME}
+        TARGET octvis_copy_resources
         POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_directory
         "${CMAKE_SOURCE_DIR}/octvis/resources"
         $<TARGET_FILE_DIR:octvis>/resources
+        COMMENT "Copying resources/ into '$<TARGET_FILE_DIR:octvis>/resources'"
 )
 
 target_include_directories(${PROJECT_NAME} PUBLIC public PRIVATE private)

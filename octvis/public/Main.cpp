@@ -15,7 +15,8 @@ class TestApp : public Application {
 
   private:
     struct TestEntityTag {
-        float theta;
+        glm::vec3 initial_pos;
+        glm::vec3 radius;
         float lerp;
     };
 
@@ -38,19 +39,19 @@ class TestApp : public Application {
         camera.look_at(glm::vec3{ 0, 0, 0 });
 
         constexpr size_t ENTITY_COUNT = 16;
-        constexpr size_t PADDING = 32;
+        constexpr size_t PADDING = 10;
         for (int i = 0; i < ENTITY_COUNT; ++i) {
             for (int j = 0; j < ENTITY_COUNT; ++j) {
 
                 entt::entity entity = m_Registry->create();
                 m_Registry->emplace<RenderableTag>(entity);
-                m_Registry->emplace<TestEntityTag>(entity);
+                TestEntityTag& tag = m_Registry->emplace<TestEntityTag>(entity);
                 Renderable& r = m_Registry->emplace<Renderable>(entity);
 
                 r.model_id = rand() % 3;
-                r.colour = glm::vec4{(25 + rand() % 75) / 100.0F};
+                r.colour = glm::vec4{ (25 + rand() % 75) / 100.0F };
                 r.use_depth_test = true;
-                r.use_face_culling = false;
+                r.use_face_culling = (r.model_id == 2);
                 r.use_wireframe = (rand() % 2) == 1;
 
                 Transform& t = m_Registry->emplace<Transform>(entity);
@@ -60,7 +61,11 @@ class TestApp : public Application {
                         0,
                         (j + 1) * PADDING
                 };
-                t.scale = glm::vec3{ 4 + rand() % 12 };
+                t.scale = glm::vec3{ 1 + rand() % 3 };
+
+                tag.initial_pos = t.position;
+                tag.radius = glm::vec3{ 0, -5 + rand() % 10, 0 };
+                tag.lerp = 0.0F;
 
             }
         }
@@ -71,17 +76,23 @@ class TestApp : public Application {
 
             // Renderable
             m_Registry->emplace<RenderableTag>(entity);
-            m_Registry->emplace<Transform>(entity);
+            Transform& t = m_Registry->emplace<Transform>(entity);
+            t.scale = glm::vec3{0.5F};
+
             Renderable& r = m_Registry->emplace<Renderable>(entity);
             r.model_id = 1;
             r.colour = glm::vec4{ 1.0F };
-            r.use_wireframe = true;
+            r.use_wireframe = false;
             r.use_depth_test = true;
             r.use_face_culling = false;
 
             // Light Source
             m_Registry->emplace<LightTag>(entity);
-            m_Registry->emplace<PointLight>(entity);
+            PointLight& pl = m_Registry->emplace<PointLight>(entity);
+
+            pl.diffuse = glm::vec3{(30 + rand() % 70) / 100.0F};
+            pl.specular = glm::vec3{(30 + rand() % 70) / 100.0F};
+            pl.shininess = float(1 << (4 + rand() % 6));
         }
 
     }
@@ -94,52 +105,21 @@ class TestApp : public Application {
 
         auto group = m_Registry->group<TestEntityTag>(entt::get<Renderable, Transform>);
 
-        // Light Position
-        auto view = m_Registry->view<LightTag, PointLight, Transform>();
+        using Clock = std::chrono::system_clock;
+        using Instant = Clock::time_point;
+        using FDuration = std::chrono::duration<float>;
 
-        view.each(
-                [this, &cam](entt::entity e, PointLight& light, Transform& trans) {
-                    srand(entt::to_integral(e));
-
-                    float a, b, c;
-                    a = m_Timing->theta;
-                    b = m_Timing->theta * ((80 + rand() % 145) / 100.0F);
-                    c = b * 0.73;
-
-                    glm::vec3 r{-20 + rand() % 40, -10 + rand() % 20, -20 + rand() % 40};
-                    r += 5;
-
-                    light.position = cam.get_position() + glm::vec3{
-                        r.x * std::sin(a) * std::cos(b),
-                        r.y * std::sin(a),
-                        r.z * std::cos(a) * std::sin(b),
-                    };
-
-                    light.colour = glm::vec3{
-                            (30 + rand() % 70) / 100.0F,
-                            (30 + rand() % 70) / 100.0F,
-                            (30 + rand() % 70) / 100.0F,
-                    };
-
-                    light.diffuse = glm::vec3{0.0F};
-                    light.specular = glm::vec3{1.5F};
-                    light.shininess = std::max((1 << (5 + rand() % 5)) * std::sin(b), 8.0F);
-
-                    trans.position = light.position;
-                    trans.scale = glm::vec3{ 0.001F };
-                    trans.rotation = glm::vec3{ get_rotation_to(cam.get_position(), trans.position), 0.0F };
-
-                }
-        );
+        Instant start = Clock::now();
 
         std::for_each(
-                std::execution::seq,
+                std::execution::unseq,
                 group.begin(),
                 group.end(),
-                [this, &cam](entt::entity e) {
+                [this](entt::entity e) {
 
                     Renderable& r = m_Registry->get<Renderable>(e);
                     Transform& t = m_Registry->get<Transform>(e);
+                    TestEntityTag& tag = m_Registry->get<TestEntityTag>(e);
 
                     srand(entt::to_integral(e));
                     r.colour = glm::vec4{
@@ -148,11 +128,58 @@ class TestApp : public Application {
                             (10 + rand() % 90) / 100.0F,
                             1.0F
                     };
-                    t.rotation = glm::vec3{ get_rotation_to(t.position, cam.get_position()), 0.0F };
+
+                    tag.lerp += m_Timing->delta;
+                    t.position = tag.initial_pos + tag.radius * std::sin(tag.lerp);
+                    if (tag.lerp >= 3.1415F * 2.0F) {
+                        tag.lerp = 0.0F;
+                    }
                 }
         );
 
+        Instant end = Clock::now();
+
+        if (ImGui::Begin("Main Debug")) {
+            ImGui::Text(
+                    "Entity Update Time %.4f (%llu)",
+                    FDuration{ end - start }.count(),
+                    group.size()
+            );
+        }
+        ImGui::End();
+
         Camera& m_Camera = m_Registry->get<Camera>(m_CameraEntity);
+        auto light_view = m_Registry->view<PointLight, Transform>();
+
+        size_t count = 4;
+        light_view.each(
+                [&cam, &count, this](entt::entity e, PointLight& pl, Transform& trans) {
+                    srand(entt::to_integral(e));
+
+                    ++count;
+                    float range = float(1 << count);
+
+                    float r = -range + rand() % int(range * 2.0F);
+                    float a = m_Timing->theta;
+                    float b = a * float((75 + rand() % 125) / 100.0F);
+                    glm::vec3 lerp{
+                            r * std::sin(a) * std::cos(b),
+                            std::abs(r),
+                            r * std::cos(a),
+                    };
+
+                    pl.colour = glm::vec3{
+                            ((50 + rand() % 50) / 100.0F ) * a,
+                            ((50 + rand() % 50) / 100.0F ) * b,
+                            ((50 + rand() % 50) / 100.0F ) * b
+                    };
+                    pl.colour = glm::clamp(pl.colour, 0.0F, 1.0F);
+
+                    pl.position = cam.get_position() + lerp;
+                    trans.position = pl.position;
+                }
+        );
+
 
         std::string title = std::format(
                 "{} :: {:.3f}, {:.5f}, {}, {:.5f}, {}; ( {:2f}, {:2f}, {:2f} ), ( {:2f}, {:2f}, {:2f} )",

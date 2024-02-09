@@ -11,8 +11,6 @@
 #include "Camera.h"
 #include "Renderer.h"
 
-#include <memory>
-
 namespace octvis {
 
     // @off
@@ -40,12 +38,19 @@ namespace octvis {
         alignas(4)  float     shininess   = 64.0F;
         alignas(16) glm::vec3 attenuation = glm::vec3{ 2.0F, 0.09F, 0.032F };
     };
+    
+    inline glm::vec3 get_forward_vec(const glm::vec3& rotate, bool is_degrees = true) {
+        glm::vec3 r;
+        if (is_degrees) {
+            r = glm::radians(rotate);
+        } else {
+            r = rotate;
+        }
 
-    inline glm::vec2 get_rotation_to(const glm::vec3& pos, const glm::vec3& at) noexcept {
-        glm::vec3 direction = glm::normalize(pos - at);
-        return glm::vec2{
-            glm::degrees(glm::asin(direction.y)),
-            glm::degrees(glm::atan(direction.x, direction.z))
+        return glm::vec3{
+                std::cos(r.x) * std::cos(r.y),
+                std::sin(r.y),
+                std::sin(r.x) * std::cos(r.y)
         };
     }
 

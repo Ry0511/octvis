@@ -61,7 +61,6 @@ namespace octvis {
             hash = (hash << 1) | static_cast<int>(use_wireframe);
             return hash;
         }
-
         size_t get_state_hash() const noexcept {
             return (static_cast<int>(use_depth_test) << 0)
                    | (static_cast<int>(use_face_culling) << 1)
