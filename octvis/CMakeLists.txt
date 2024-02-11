@@ -19,6 +19,7 @@ set(
         public/InputSystem.h
         public/RenderApplication.h
         public/WavefrontReader.h
+        public/Utility.h
 )
 
 set(
@@ -31,6 +32,7 @@ set(
         private/InputSystem.cpp
         private/RenderApplication.cpp
         private/WavefrontReader.cpp
+        private/Utility.cpp
 )
 
 ################################################################################
