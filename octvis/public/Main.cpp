@@ -1,258 +1,294 @@
 
-// Dear ImGui: standalone example application for SDL2 + OpenGL
-// (SDL is a cross-platform general purpose library for handling windows, inputs, OpenGL/Vulkan/Metal graphics context creation, etc.)
-// If you are new to Dear ImGui, read documentation from the docs/ folder + read the top of imgui.cpp.
-// Read online: https://github.com/ocornut/imgui/tree/master/docs
-
 #include "Logging.h"
+#include "Context.h"
+#include "Application.h"
+#include "RenderApplication.h"
 
-#include "Renderer.h"
-#include "glm/gtc/matrix_transform.hpp"
+#include <algorithm>
+#include <execution>
+#include <chrono>
 
-//
-// Plan for branch merge.
-//
-
+using namespace octvis;
 using namespace octvis::renderer;
 
-#define SDL_MAIN_HANDLED
+class TestApp : public Application {
 
-#include "SDL.h"
+  private:
+    struct TestEntityTag {
+        glm::vec3 initial_pos;
+        glm::vec3 radius;
+        float lerp;
+    };
 
-void* initialise();
-void update(void*, float);
-void render(void*);
-void cleanup(void*);
+  private:
+    entt::entity m_CameraEntity;
 
-int main(int, char**) {
-    // Setup SDL
-    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0) {
-        OCTVIS_ERROR("Error: {}", SDL_GetError());
-        return -1;
-    }
+  public:
+    TestApp() : Application("Test App") {}
 
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 5);
+  public:
+    virtual void on_start() noexcept override {
+        OCTVIS_TRACE("Test App Starting!");
 
-    // Create window with graphics context
-    SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
-    SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
-    SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
-    SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 1);
-    SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 8);
-    SDL_WindowFlags window_flags = (SDL_WindowFlags) (
-            SDL_WINDOW_OPENGL
-            | SDL_WINDOW_RESIZABLE
-            | SDL_WINDOW_ALLOW_HIGHDPI
-    );
-    SDL_Window* window = SDL_CreateWindow(
-            "Octvis",
-            SDL_WINDOWPOS_CENTERED,
-            SDL_WINDOWPOS_CENTERED,
-            800,
-            600,
-            window_flags
-    );
-    SDL_GLContext gl_context = SDL_GL_CreateContext(window);
-    SDL_GL_MakeCurrent(window, gl_context);
-    SDL_GL_SetSwapInterval(1);
+        m_CameraEntity = m_Registry->create();
+        m_Registry->emplace<CameraTag>(m_CameraEntity);
+        Camera& camera = m_Registry->emplace<Camera>(m_CameraEntity);
 
-    if (glewInit() != GLEW_OK) {
-        OCTVIS_ERROR("Failed to initialise GLEW.");
-        return -1;
-    }
+        camera.set_projection(90.0F, 0.1F, 1000.0F, 800.0F / 600.0F);
+        camera.set_position(glm::vec3{ 0, 0, -5 });
+        camera.look_at(glm::vec3{ 0, 0, 0 });
 
-    void* state = initialise();
+        constexpr size_t ENTITY_COUNT = 8;
+        constexpr size_t PADDING = 5;
+        for (int i = 0; i < ENTITY_COUNT; ++i) {
+            for (int j = 0; j < ENTITY_COUNT; ++j) {
 
-    using Clock = std::chrono::high_resolution_clock;
-    using Instant = Clock::time_point;
+                entt::entity entity = m_Registry->create();
+                m_Registry->emplace<RenderableTag>(entity);
+                TestEntityTag& tag = m_Registry->emplace<TestEntityTag>(entity);
+                Renderable& r = m_Registry->emplace<Renderable>(entity);
+                m_Registry->emplace<ModelMatrix>(entity);
 
-    Instant start;
-    Instant end;
-    float delta = 0.0F;
+                r.model_id = rand() % 3;
+                r.colour = glm::vec4{ (25 + rand() % 75) / 100.0F };
+                r.use_depth_test = true;
+                r.use_face_culling = (r.model_id == 2);
+                r.use_wireframe = (rand() % 2) == 1;
 
-    constexpr size_t frame_timing_size = 1024;
-    std::vector<float> frame_timing{};
-    frame_timing.reserve(frame_timing_size);
-    frame_timing.resize(frame_timing_size, 0.0F);
-    size_t index = 0;
-    double fps = -1.0F;
+                Transform& t = m_Registry->emplace<Transform>(entity);
+                srand(entt::to_integral(entity));
+                t.position = glm::vec3{
+                        (i + 1) * PADDING,
+                        0,
+                        (j + 1) * PADDING
+                };
+                t.scale = glm::vec3{ 1 };
 
-    bool is_running = true;
-    while (is_running) {
+                tag.initial_pos = t.position;
+                tag.radius = glm::vec3{ -5 + rand() % 10 };
+                tag.lerp = 0.0F;
 
-        if (index == frame_timing_size - 1) {
-            index = 0;
-
-            double sum = 0.0;
-            for (float& t : frame_timing) {
-                sum += t;
-                t = 0.0F;
-            }
-            fps = (double{ 1.0F } * double{ frame_timing_size }) / sum;
-            OCTVIS_TRACE("Average FPS over {} updates {:.3f}", frame_timing_size, fps);
-            frame_timing.resize(frame_timing_size, 0.0F);
-        }
-
-        start = Clock::now();
-
-        SDL_Event event{};
-        while (SDL_PollEvent(&event)) {
-            if (event.type == SDL_QUIT) {
-                is_running = false;
             }
         }
+
+        constexpr size_t LIGHT_COUNT = 8;
+        for (int i = 0; i < LIGHT_COUNT; ++i) {
+            entt::entity entity = m_Registry->create();
+
+            // Renderable
+            m_Registry->emplace<RenderableTag>(entity);
+            m_Registry->emplace<ModelMatrix>(entity);
+            Transform& t = m_Registry->emplace<Transform>(entity);
+            t.scale = glm::vec3{ 0.05F };
+
+            Renderable& r = m_Registry->emplace<Renderable>(entity);
+            r.model_id = 1;
+            r.colour = glm::vec4{ 1.0F };
+            r.use_wireframe = false;
+            r.use_depth_test = true;
+            r.use_face_culling = false;
+
+            // Light Source
+            m_Registry->emplace<LightTag>(entity);
+            PointLight& pl = m_Registry->emplace<PointLight>(entity);
+
+            pl.diffuse = glm::vec3{ (30 + rand() % 70) / 100.0F };
+            pl.specular = glm::vec3{ 1.25F, 0.33F, 0.33F };
+            pl.colour = glm::vec3{ 1.0F, 0.33F, 0.33F };
+            pl.shininess = float(1 << (4 + rand() % 6));
+        }
+
+    }
+
+    virtual void on_update() noexcept override {
+
+        ImGui::DockSpaceOverViewport(nullptr, ImGuiDockNodeFlags_PassthruCentralNode);
+
+        const Camera& cam = m_Registry->get<Camera>(m_CameraEntity);
+
+        auto group = m_Registry->group<TestEntityTag>(entt::get<Renderable, Transform>);
+
+        using Clock = std::chrono::system_clock;
+        using Instant = Clock::time_point;
+        using FDuration = std::chrono::duration<float>;
+
+        Instant start = Clock::now();
+
+        std::for_each(
+                std::execution::par_unseq,
+                group.begin(),
+                group.end(),
+                [this](entt::entity e) {
+
+                    Renderable& r = m_Registry->get<Renderable>(e);
+                    Transform& t = m_Registry->get<Transform>(e);
+                    TestEntityTag& tag = m_Registry->get<TestEntityTag>(e);
+
+                    srand(entt::to_integral(e));
+                    r.colour = glm::vec4{
+                            (10 + rand() % 90) / 100.0F,
+                            (10 + rand() % 90) / 100.0F,
+                            (10 + rand() % 90) / 100.0F,
+                            1.0F
+                    };
+
+                    tag.lerp += m_Timing->delta;
+                    t.position = tag.initial_pos + tag.radius * std::sin(tag.lerp);
+                    if (tag.lerp >= 3.1415F * 2.0F) {
+                        tag.lerp = 0.0F;
+                    }
+                }
+        );
+
+        Instant end = Clock::now();
+
+        if (ImGui::Begin("Application Timings")) {
+            ImGui::SeparatorText("Main App");
+            ImGui::Text(
+                    "Entity Update Time %.4f (%llu)",
+                    FDuration{ end - start }.count(),
+                    group.size()
+            );
+        }
+        ImGui::End();
+
+        Camera& m_Camera = m_Registry->get<Camera>(m_CameraEntity);
+        auto light_view = m_Registry->view<PointLight, Transform>();
+
+        size_t count = 4;
+        light_view.each(
+                [&cam, &count, this](entt::entity e, PointLight& pl, Transform& trans) {
+                    srand(entt::to_integral(e));
+
+                    ++count;
+                    float range = float(1 << count);
+
+                    float r = -range + rand() % int(range * 2.0F);
+                    float a = m_Timing->theta;
+                    float b = a * float((75 + rand() % 125) / 100.0F);
+                    glm::vec3 lerp{
+                            r * std::sin(a) * std::cos(b),
+                            std::abs(r),
+                            r * std::cos(a),
+                    };
+
+                    pl.colour = glm::vec3{
+                            ((50 + rand() % 50) / 100.0F) * a,
+                            ((50 + rand() % 50) / 100.0F) * b,
+                            ((50 + rand() % 50) / 100.0F) * b
+                    };
+                    pl.colour = glm::clamp(pl.colour, 0.0F, 1.0F);
+
+                    pl.position = cam.get_position() + lerp;
+                    trans.position = pl.position;
+                }
+        );
+
+
+        std::string title = std::format(
+                "{} :: {:.3f}, {:.5f}, {}, {:.5f}, {}; ( {:2f}, {:2f}, {:2f} ), ( {:2f}, {:2f}, {:2f} )",
+                m_AppName,
+                m_Timing->theta,
+                m_Timing->delta,
+                m_Timing->delta_ticks,
+                m_Timing->fixed,
+                m_Timing->fixed_ticks,
+
+                m_Camera.get_rotate().x,
+                m_Camera.get_rotate().y,
+                m_Camera.get_rotate().z,
+
+                m_Camera.get_position().x,
+                m_Camera.get_position().y,
+                m_Camera.get_position().z
+        );
+        SDL_SetWindowTitle(m_Window->handle, title.c_str());
 
         int width, height;
-        SDL_GetWindowSize(window, &width, &height);
-
+        SDL_GetWindowSize(m_Window->handle, &width, &height);
         glViewport(0, 0, width, height);
-        glClearColor(0.2F, 0.2F, 0.2F, 1.0F);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        m_Context->clear();
 
-        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-        glLineWidth(1.0F);
+        // Moving Around
+        float vel = 20.0F * m_Timing->delta;
 
-        std::string title = std::format("Octvis :: {:.2f}, {}, {:.3f}ms", fps, (size_t) (1.0F / delta), delta);
-        SDL_SetWindowTitle(window, title.c_str());
+        if (InputSystem::is_key_pressed(SDLK_w)) m_Camera.translate_forward(vel);
+        if (InputSystem::is_key_pressed(SDLK_s)) m_Camera.translate_forward(-vel);
+        if (InputSystem::is_key_pressed(SDLK_a)) m_Camera.translate_horizontal(-vel);
+        if (InputSystem::is_key_pressed(SDLK_d)) m_Camera.translate_horizontal(vel);
 
-        update(state, delta);
-        render(state);
+        glm::vec3 pos = m_Camera.get_position();
+        m_Camera.set_position(pos);
 
-        SDL_GL_SwapWindow(window);
+        // Capture Mouse
+        static bool is_relative_mode = false;
+        if (InputSystem::is_key_released(SDLK_ESCAPE)) {
+            is_relative_mode = !is_relative_mode;
+            SDL_SetRelativeMouseMode(is_relative_mode ? SDL_TRUE : SDL_FALSE);
+        }
 
-        end = Clock::now();
-        delta = std::chrono::duration<float>(end - start).count();
+        // Looking Around
+        if (is_relative_mode) {
+            glm::vec2 mvel = InputSystem::get_mouse_vel() * m_Timing->delta * 2.0F;
+            m_Camera.look(mvel);
+        }
 
-        frame_timing[index] = delta;
-        ++index;
+        if (InputSystem::is_key_pressed(SDLK_LEFT)) m_Camera.look_horizontal(-m_Timing->fixed);
+        if (InputSystem::is_key_pressed(SDLK_RIGHT)) m_Camera.look_horizontal(m_Timing->fixed);
+        if (InputSystem::is_key_pressed(SDLK_UP)) m_Camera.look_vertical(m_Timing->fixed);
+        if (InputSystem::is_key_pressed(SDLK_DOWN)) m_Camera.look_vertical(-m_Timing->fixed);
+
+        static bool is_movement_xz = false;
+        if (InputSystem::is_key_released(SDLK_1)) {
+            is_movement_xz = !is_movement_xz;
+            m_Camera.set_move_xz(is_movement_xz);
+        }
+
+        if (InputSystem::is_key_released(SDLK_r)) m_Camera.look_at(glm::vec3{ 0 });
+
+        if (ImGui::Begin("Debug")) {
+            ImGui::Text("W => %s", InputSystem::is_key_pressed(SDLK_w) ? "Pressed" : "Released");
+            ImGui::Text("A => %s", InputSystem::is_key_pressed(SDLK_a) ? "Pressed" : "Released");
+            ImGui::Text("S => %s", InputSystem::is_key_pressed(SDLK_s) ? "Pressed" : "Released");
+            ImGui::Text("D => %s", InputSystem::is_key_pressed(SDLK_d) ? "Pressed" : "Released");
+
+            auto mvel = InputSystem::get_mouse_vel();
+            ImGui::Text("MVel => ( %.4f, %.4f )", mvel.x, mvel.y);
+
+            glm::vec3 position = m_Camera.get_position();
+            glm::vec3 rotation = m_Camera.get_rotate();
+            ImGui::Text("Position ( %.3f, %.3f, %.3f )", pos.x, pos.y, pos.z);
+            ImGui::Text("YPR      ( %.3f, %.3f, %.3f )", rotation.x, rotation.y, rotation.z);
+        }
+        ImGui::End();
+
+        if (ImGui::Begin("Application Timings")) {
+            ImGui::Text("Framerate          %0f", 1.0F / m_Timing->delta);
+            ImGui::Text("Theta              %2f", m_Timing->theta);
+            ImGui::Text("Delta              %4f", m_Timing->delta);
+            ImGui::Text("Fixed              %4f", m_Timing->fixed);
+            ImGui::Text("Delta Ticks        %llu", m_Timing->delta_ticks);
+            ImGui::Text("Fixed Ticks        %llu", m_Timing->fixed_ticks);
+            ImGui::Text("Fixed Update Theta %4f", m_Timing->fixed_update_total_time);
+            ImGui::Text("Delta Update Theta %4f", m_Timing->update_total_time);
+        }
+        ImGui::End();
+
     }
 
-    cleanup(state);
+    virtual void on_fixed_update() noexcept override {
+    }
 
+    virtual void on_finish() noexcept override {
+        OCTVIS_TRACE("Test App Finished!");
+    }
+
+};
+
+int main(int, char**) {
+    Context ctx{};
+    ctx.emplace_app<TestApp>();
+    ctx.emplace_app<RenderApplication>();
+    if (!ctx.start()) return -1;
     return 0;
-}
-
-//############################################################################//
-// |  |
-//############################################################################//
-
-struct Vertex {
-    glm::vec3 position;
-    glm::vec3 normal;
-    glm::vec3 colour;
-    glm::vec2 tex_coord;
-};
-
-struct RenderState {
-    Buffer vertex_buffer{ BufferType::ARRAY };
-    Buffer uniform_buffer{ BufferType::UNIFORM };
-    ShaderProgram shader_program{};
-    VertexArrayObject vao{};
-    Texture2D texture{};
-};
-
-struct UniformState {
-    glm::mat4 projection;
-    glm::mat4 view;
-    glm::mat4 model;
-};
-
-void* initialise() {
-
-    RenderState* state = new RenderState{};
-
-    // @off
-    Vertex vertices[]{
-            { glm::vec3{  0.00F,  1.00F,  0.00F }, glm::vec3{ 0.0F, 0.0F, 0.0F }, glm::vec3{ 0.0F, 0.0F, 1.0F }, glm::vec2{ 0.5F, 1.0F } },
-            { glm::vec3{ -1.00F, -1.00F,  0.00F }, glm::vec3{ 0.0F, 0.0F, 0.0F }, glm::vec3{ 0.0F, 1.0F, 0.0F }, glm::vec2{ 0.0F, 0.0F } },
-            { glm::vec3{  1.00F, -1.00F,  0.00F }, glm::vec3{ 0.0F, 0.0F, 0.0F }, glm::vec3{ 1.0F, 0.0F, 0.0F }, glm::vec2{ 1.0F, 0.0F } },
-    };
-    // @on
-
-    state->vertex_buffer.init(3, vertices, BufferUsage::STATIC);
-
-    UniformState ubo{
-            glm::perspective(90.0F, 16.0F / 9.0F, 0.1F, 100.0F),
-            glm::lookAt(glm::vec3{ 0, 0, -1 }, glm::vec3{ 0, 0, 0 }, glm::vec3{ 0, 1, 0 }),
-            glm::scale(glm::mat4{ 1 }, glm::vec3{ 0.8F, 0.8F, 0.8F })
-    };
-    state->uniform_buffer.init(1, &ubo, BufferUsage::DYNAMIC);
-
-    state->shader_program.init();
-    {
-        Shader vertex{ ShaderType::VERTEX };
-        vertex.load_from_path(
-                "G:\\University\\Year 4\\CSP400\\Project\\octvis\\octvis\\resources\\VertexShader_UBO.glsl"
-        );
-        state->shader_program.attach_shader(vertex);
-
-        Shader fragment{ ShaderType::FRAGMENT };
-        fragment.load_from_path(
-                "G:\\University\\Year 4\\CSP400\\Project\\octvis\\octvis\\resources\\FragmentShader.glsl"
-        );
-        state->shader_program.attach_shader(fragment);
-
-        state->shader_program.link();
-    }
-
-    state->vao.init();
-    state->vao.bind();
-    state->vao.attach_buffer(state->vertex_buffer)
-         .add_interleaved_attributes<glm::vec3, glm::vec3, glm::vec3, glm::vec2>(0);
-    state->vao.unbind();
-
-    // Load Image
-    RawImage img{};
-    img.format = ColourFormat::RGBA;
-    img.pixel_type = PixelType::UBYTE;
-    img.load_from_path("G:\\University\\Year 4\\CSP400\\Project\\octvis\\octvis\\resources\\Untitled.png");
-
-    // Init Texture
-    state->texture.init(img);
-
-    return state;
-}
-
-void update(void* ptr, float delta) {
-
-    RenderState* state = static_cast<RenderState*>(ptr);
-
-    UniformState* uniforms = static_cast<UniformState*>(state->uniform_buffer.create_mapping());
-
-    static float theta = 0.0F;
-    theta += delta * 2.0F;
-    if (theta >= 3.1415f * 2.0F) theta = 0.0F;
-
-    float radius = 2.0F;
-
-    glm::vec3 pos{
-            radius * std::cos(theta),
-            radius * std::sin(theta) + std::cos(theta),
-            radius * std::sin(theta),
-    };
-
-    uniforms->view = glm::lookAt(pos, glm::vec3{ 0, 0, 0 }, glm::vec3{ 0, 1, 0 });
-
-    state->uniform_buffer.release_mapping();
-}
-
-void render(void* ptr) {
-
-    RenderState* state = static_cast<RenderState*>(ptr);
-
-    state->vao.bind();
-    state->shader_program.activate();
-    state->shader_program.set_ubo(state->uniform_buffer, 0, "render_state");
-    state->shader_program.set_texture(state->texture, 0, "img");
-    glDrawArrays(GL_TRIANGLES, 0, 3);
-
-    state->shader_program.deactivate();
-    state->vao.unbind();
-
-}
-
-void cleanup(void* ptr) {
-    delete static_cast<RenderState*>(ptr);
 }

@@ -13,6 +13,13 @@ set(
 
         public/Logging.h # Could be in private
         public/Renderer.h
+        public/Camera.h
+        public/Application.h
+        public/Context.h
+        public/InputSystem.h
+        public/RenderApplication.h
+        public/WavefrontReader.h
+        public/Utility.h
 )
 
 set(
@@ -20,6 +27,12 @@ set(
 
         public/Main.cpp
         private/Renderer.cpp
+        private/Camera.cpp
+        private/Context.cpp
+        private/InputSystem.cpp
+        private/RenderApplication.cpp
+        private/WavefrontReader.cpp
+        private/Utility.cpp
 )
 
 ################################################################################
@@ -33,11 +46,14 @@ add_executable(
 )
 
 # Copies 'octvis/resources' into 'bin/resources' for relative pathing
+add_custom_target(octvis_copy_resources ALL)
+
 add_custom_command(
-        TARGET ${PROJECT_NAME}
+        TARGET octvis_copy_resources
         POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_directory
         "${CMAKE_SOURCE_DIR}/octvis/resources"
         $<TARGET_FILE_DIR:octvis>/resources
+        COMMENT "Copying resources/ into '$<TARGET_FILE_DIR:octvis>/resources'"
 )
 
 target_include_directories(${PROJECT_NAME} PUBLIC public PRIVATE private)
@@ -54,6 +70,7 @@ target_link_libraries(${PROJECT_NAME} PUBLIC OpenGL::GL)
 target_link_libraries(${PROJECT_NAME} PUBLIC SDL2::SDL2)
 target_link_libraries(${PROJECT_NAME} PUBLIC imgui::imgui)
 target_link_libraries(${PROJECT_NAME} PUBLIC stb_image)
+target_link_libraries(${PROJECT_NAME} PUBLIC EnTT::EnTT)
 
 ################################################################################
 # TESTS

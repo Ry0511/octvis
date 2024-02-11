@@ -30,12 +30,33 @@ namespace octvis::renderer {
     }
 
     Buffer::~Buffer() {
+        if (m_BufferID == INVALID_ID) return;
+        if (m_MappedData != nullptr) release_mapping();
+
+        OCTVIS_TRACE(
+                "Deleting Buffer '{}, {:#06x}, {:#06x}, {:#06x}'",
+                m_BufferID,
+                (GLenum) m_Type,
+                (GLenum) m_Usage,
+                m_SizeInBytes
+        );
+        GL_CALL(glDeleteBuffers(1, &m_BufferID));
     }
 
-    Buffer::Buffer(Buffer&&) {
+    Buffer::Buffer(Buffer&& other) {
+        std::swap(m_BufferID, other.m_BufferID);
+        std::swap(m_Type, other.m_Type);
+        std::swap(m_Usage, other.m_Usage);
+        std::swap(m_SizeInBytes, other.m_SizeInBytes);
+        std::swap(m_MappedData, other.m_MappedData);
     }
 
-    Buffer& Buffer::operator =(Buffer&&) {
+    Buffer& Buffer::operator =(Buffer&& other) {
+        std::swap(m_BufferID, other.m_BufferID);
+        std::swap(m_Type, other.m_Type);
+        std::swap(m_Usage, other.m_Usage);
+        std::swap(m_SizeInBytes, other.m_SizeInBytes);
+        std::swap(m_MappedData, other.m_MappedData);
         return *this;
     }
 
@@ -68,6 +89,13 @@ namespace octvis::renderer {
                 glGetIntegerv(GL_SHADER_STORAGE_BUFFER_BINDING, (GLint*) &bound_buffer);
                 break;
 
+            case BufferType::DRAW_INDIRECT:
+                glGetIntegerv(GL_DRAW_INDIRECT_BUFFER_BINDING, (GLint*) &bound_buffer);
+                break;
+
+            default:
+                OCTVIS_ASSERT(false, "Buffer type not being handled!");
+
         }
         return is_valid() && bound_buffer == m_BufferID;
     }
@@ -76,9 +104,12 @@ namespace octvis::renderer {
         OCTVIS_ASSERT(is_valid(), "Buffer is invalid");
         OCTVIS_ASSERT(bytes > 0, "Buffer size can't be zero");
         bind();
-        OCTVIS_TRACE("Buffer Data ( {}, {:p}, {:#06x} )", bytes, data, (GLenum) usage);
+        if (m_SizeInBytes == 0) {
+            OCTVIS_TRACE("[FIRST_INIT] Buffer Data ( {}, {:p}, {:#06x} )", bytes, data, (GLenum) usage);
+        }
         GL_CALL(glBufferData(get_type(), bytes, data, (GLenum) usage));
         m_Usage = usage;
+        m_SizeInBytes = bytes;
         unbind();
     }
 
@@ -92,6 +123,7 @@ namespace octvis::renderer {
         OCTVIS_ASSERT(m_MappedData == nullptr, "Buffer has already been mapped.");
         bind();
         m_MappedData = GL_CALL(glMapBuffer(get_type(), static_cast<GLenum>(mode)));
+        OCTVIS_ASSERT(m_MappedData != nullptr, "Failed to create mapping.");
         unbind();
         return m_MappedData;
     }
@@ -102,6 +134,32 @@ namespace octvis::renderer {
         GL_CALL(glUnmapBuffer(get_type()));
         m_MappedData = nullptr;
         unbind();
+    }
+
+    void Buffer::copy_from_raw(
+            const Buffer& other,
+            size_t begin_bytes, // Begin in other
+            size_t size_bytes,  // Size of other
+            size_t write_start  // Start in self
+    ) const {
+
+        OCTVIS_ASSERT(
+                m_SizeInBytes >= write_start + size_bytes,
+                "Can't copy data from buffer as there is not enough space; {}, {}, {}",
+                begin_bytes,
+                size_bytes,
+                write_start
+        );
+
+        GL_CALL(glBindBuffer(GL_COPY_READ_BUFFER, other.id()));
+        GL_CALL(glBindBuffer(GL_COPY_WRITE_BUFFER, id()));
+        GL_CALL(glCopyBufferSubData(
+                GL_COPY_READ_BUFFER,
+                GL_COPY_WRITE_BUFFER,
+                begin_bytes,
+                write_start,
+                size_bytes
+        ));
     }
 
     //############################################################################//
@@ -513,6 +571,7 @@ namespace octvis::renderer {
     VertexArrayObject& VertexArrayObject::set_divisor_range(
             index_t begin, index_t end, index_t divisor
     ) {
+        OCTVIS_TRACE("Divisor Range => ( {} < {} = {} )", begin, end, divisor);
         for (int i = begin; i < end; ++i) {
             GL_CALL(glVertexAttribDivisor(i, divisor));
         }
