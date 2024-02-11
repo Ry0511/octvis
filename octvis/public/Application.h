@@ -15,7 +15,7 @@ namespace octvis {
 
     // @off
 
-    struct Transform {
+    struct alignas(32) Transform {
         glm::vec3 position{0.0F}, rotation{0.0F}, scale{1.0F};
 
         glm::mat4 as_matrix() const noexcept {
@@ -25,6 +25,11 @@ namespace octvis {
                 * glm::rotate(glm::mat4{1}, rotation.z, glm::vec3{0, 0, 1})
                 * glm::scale(glm::mat4{1}, scale);
         }
+    };
+
+    struct alignas(32) ModelMatrix {
+        glm::mat4 model;
+        glm::mat3 normal;
     };
 
     struct LightTag {};

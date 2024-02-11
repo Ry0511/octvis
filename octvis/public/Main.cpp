@@ -38,8 +38,8 @@ class TestApp : public Application {
         camera.set_position(glm::vec3{ 0, 0, -5 });
         camera.look_at(glm::vec3{ 0, 0, 0 });
 
-        constexpr size_t ENTITY_COUNT = 16;
-        constexpr size_t PADDING = 10;
+        constexpr size_t ENTITY_COUNT = 8;
+        constexpr size_t PADDING = 5;
         for (int i = 0; i < ENTITY_COUNT; ++i) {
             for (int j = 0; j < ENTITY_COUNT; ++j) {
 
@@ -47,6 +47,7 @@ class TestApp : public Application {
                 m_Registry->emplace<RenderableTag>(entity);
                 TestEntityTag& tag = m_Registry->emplace<TestEntityTag>(entity);
                 Renderable& r = m_Registry->emplace<Renderable>(entity);
+                m_Registry->emplace<ModelMatrix>(entity);
 
                 r.model_id = rand() % 3;
                 r.colour = glm::vec4{ (25 + rand() % 75) / 100.0F };
@@ -61,10 +62,10 @@ class TestApp : public Application {
                         0,
                         (j + 1) * PADDING
                 };
-                t.scale = glm::vec3{ 1 + rand() % 3 };
+                t.scale = glm::vec3{ 1 };
 
                 tag.initial_pos = t.position;
-                tag.radius = glm::vec3{ 0, -5 + rand() % 10, 0 };
+                tag.radius = glm::vec3{ -5 + rand() % 10 };
                 tag.lerp = 0.0F;
 
             }
@@ -76,8 +77,9 @@ class TestApp : public Application {
 
             // Renderable
             m_Registry->emplace<RenderableTag>(entity);
+            m_Registry->emplace<ModelMatrix>(entity);
             Transform& t = m_Registry->emplace<Transform>(entity);
-            t.scale = glm::vec3{0.5F};
+            t.scale = glm::vec3{ 0.05F };
 
             Renderable& r = m_Registry->emplace<Renderable>(entity);
             r.model_id = 1;
@@ -90,8 +92,9 @@ class TestApp : public Application {
             m_Registry->emplace<LightTag>(entity);
             PointLight& pl = m_Registry->emplace<PointLight>(entity);
 
-            pl.diffuse = glm::vec3{(30 + rand() % 70) / 100.0F};
-            pl.specular = glm::vec3{(30 + rand() % 70) / 100.0F};
+            pl.diffuse = glm::vec3{ (30 + rand() % 70) / 100.0F };
+            pl.specular = glm::vec3{ 1.25F, 0.33F, 0.33F };
+            pl.colour = glm::vec3{ 1.0F, 0.33F, 0.33F };
             pl.shininess = float(1 << (4 + rand() % 6));
         }
 
@@ -112,7 +115,7 @@ class TestApp : public Application {
         Instant start = Clock::now();
 
         std::for_each(
-                std::execution::unseq,
+                std::execution::par_unseq,
                 group.begin(),
                 group.end(),
                 [this](entt::entity e) {
@@ -139,7 +142,8 @@ class TestApp : public Application {
 
         Instant end = Clock::now();
 
-        if (ImGui::Begin("Main Debug")) {
+        if (ImGui::Begin("Application Timings")) {
+            ImGui::SeparatorText("Main App");
             ImGui::Text(
                     "Entity Update Time %.4f (%llu)",
                     FDuration{ end - start }.count(),
@@ -169,9 +173,9 @@ class TestApp : public Application {
                     };
 
                     pl.colour = glm::vec3{
-                            ((50 + rand() % 50) / 100.0F ) * a,
-                            ((50 + rand() % 50) / 100.0F ) * b,
-                            ((50 + rand() % 50) / 100.0F ) * b
+                            ((50 + rand() % 50) / 100.0F) * a,
+                            ((50 + rand() % 50) / 100.0F) * b,
+                            ((50 + rand() % 50) / 100.0F) * b
                     };
                     pl.colour = glm::clamp(pl.colour, 0.0F, 1.0F);
 

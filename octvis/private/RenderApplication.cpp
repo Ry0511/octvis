@@ -7,6 +7,7 @@
 #include "RenderApplication.h"
 
 #include "WavefrontReader.h"
+#include "Utility.h"
 
 #include <algorithm>
 #include <execution>
@@ -54,7 +55,7 @@ namespace octvis {
         // Initialise Buffers
         m_ModelBuffer->reserve(256);
         m_InstanceBuffer->reserve(256);
-        m_UniformBuffer->init<RenderState>(1, nullptr, renderer::BufferUsage::DYNAMIC);
+        m_UniformBuffer->init<RenderState>(1, nullptr, BufferUsage::DYNAMIC);
 
         // Initialise Shader
         m_ShaderProgram.create("resources/VertexShader_UBO.glsl", "resources/FragmentShader.glsl");
@@ -111,7 +112,7 @@ namespace octvis {
         // renderable entities by Render State and then Model ID.
         //
 
-        auto group = m_Registry->group<RenderableTag, Renderable>(entt::get<Transform>);
+        auto group = m_Registry->group<RenderableTag, Renderable, ModelMatrix>(entt::get<Transform>);
 
         group.sort<Renderable>(
                 [](const Renderable& lhs, const Renderable& rhs) {
@@ -126,75 +127,96 @@ namespace octvis {
                 }
         );
 
+        if (group.size() == 0) {
+            return;
+        }
+
+        // This is trivially made parallel.
+        start_timer();
+        std::for_each(
+                std::execution::par_unseq, group.begin(), group.end(),
+                [this](entt::entity entity) {
+                    ModelMatrix& mat = m_Registry->get<ModelMatrix>(entity);
+                    Transform& trans = m_Registry->get<Transform>(entity);
+                    mat.model = trans.as_matrix();
+                    mat.normal = glm::mat3{glm::transpose(glm::inverse(mat.model))};
+                }
+        );
+        float model_calc_duration = elapsed();
+
         // Initialise Uniform Buffer with Camera & Lighting information
         update_render_state();
 
-        Renderable active_state;
-        active_state.model_id = -1;
-        std::vector<MultiDrawCommand> commands(m_Models.size());
+        struct alignas(64) RenderInfo {
+            Renderable state;
+            std::vector<MultiDrawCommand> commands;
+            std::vector<InstanceData> data;
+            size_t count;
 
-        for (int i = 0; i < m_Models.size(); ++i) {
-            const ModelImpl& impl = m_Models[i];
-            commands[i].first = impl.begin;
-            commands[i].count = impl.vertex_count;
-        }
+            void init_commands(const std::vector<ModelImpl>& models) noexcept {
+                commands.resize(models.size());
+                for (int i = 0; i < models.size(); ++i) {
+                    const ModelImpl& impl = models[i];
 
-        std::vector<InstanceData> instance_data{};
-        instance_data.reserve(256);
+                    MultiDrawCommand& cmd = commands[i];
+                    cmd.first = impl.begin;
+                    cmd.count = impl.vertex_count;
+                    cmd.instance_count = 0;
+                    cmd.base_instance = 0;
+                }
+            }
+        };
 
+        std::unordered_map<size_t, RenderInfo> flat_map_vec{};
+        flat_map_vec.reserve(16);
+
+        start_timer();
         std::for_each(
-                std::execution::seq,
+                std::execution::unseq,
                 group.begin(),
                 group.end(),
-                [this, &active_state, &commands, &instance_data](const entt::entity e) {
-                    const Transform& transform = m_Registry->get<const Transform>(e);
-                    const Renderable& renderable = m_Registry->get<const Renderable>(e);
+                [&flat_map_vec, this](entt::entity entity) {
 
-                    // First Iteration
-                    if (active_state.model_id == -1) [[unlikely]] {
-                        active_state = renderable;
+                    const Renderable& renderable = m_Registry->get<Renderable>(entity);
+                    const ModelMatrix& mat = m_Registry->get<ModelMatrix>(entity);
 
-                        // State Switched; Start Rendering this state
-                    } else if (active_state.get_state_hash() != renderable.get_state_hash()) {
+                    // Add Into Map
+                    size_t state_hash = renderable.get_state_hash();
+                    const auto& [pair, was_added] = flat_map_vec.try_emplace(state_hash);
+                    RenderInfo& info = pair->second;
 
-                        // Instance Data
-                        unsigned int begin = 0;
-                        for (MultiDrawCommand& cmd : commands) {
-
-                            // Skip Empty Models
-                            if (cmd.instance_count == 0) {
-                                continue;
-                            }
-
-                            // Instance Stride
-                            cmd.base_instance = begin;
-                            begin += cmd.instance_count;
-                        }
-
-                        render_instance_data(active_state, commands, instance_data);
-
-                        // Initialise for next state (if any)
-                        active_state = renderable;
-                        for (auto& cmd : commands) cmd.instance_count = 0;
-                        instance_data.clear();
+                    if (was_added) {
+                        info.state = renderable;
+                        info.init_commands(m_Models);
                     }
+                    MultiDrawCommand& cmd = info.commands[renderable.model_id];
+                    cmd.instance_count++;
 
-                    // Update State
-                    commands[renderable.model_id].instance_count++;
-
-                    // Initialise Instance Data
-                    InstanceData& i = instance_data.emplace_back();
-                    i.colour = renderable.colour;
-                    i.model = transform.as_matrix();
-                    i.normal_matrix = glm::mat3{ glm::transpose(glm::inverse(i.model)) };
+                    InstanceData& data = info.data.emplace_back();
+                    data.colour = renderable.colour;
+                    data.model = mat.model;
+                    data.normal_matrix = mat.normal;
                 }
         );
+        float renderable_process_duration = elapsed();
 
-        // NOTE; this is required otherwise the 'final' state will never be rendered
-        if (active_state.model_id != -1) {
-            render_instance_data(active_state, commands, instance_data);
+        if (ImGui::Begin("Application Timings")) {
+            ImGui::SeparatorText("Render Application");
+            ImGui::Text("Model Calculation Duration %.4f", model_calc_duration);
+            ImGui::Text("Renderable Processing Duration %.4f", renderable_process_duration);
         }
+        ImGui::End();
 
+        for (auto& [_, info] : flat_map_vec) {
+
+            size_t begin = 0;
+            for (MultiDrawCommand& cmd : info.commands) {
+                cmd.base_instance = begin;
+                begin += cmd.instance_count;
+            }
+
+            render_instance_data(info.state, info.commands, info.data);
+        }
 
     }
 
