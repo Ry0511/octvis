@@ -10,11 +10,16 @@ set(PROJECT_NAME "octvis")
 
 set(
         octvis_HEADER_FILES
+
+        public/Logging.h # Could be in private
+        public/Renderer.h
 )
 
 set(
         octvis_SOURCE_FILES
+
         public/Main.cpp
+        private/Renderer.cpp
 )
 
 ################################################################################
@@ -26,3 +31,32 @@ add_executable(
         ${octvis_HEADER_FILES}
         ${octvis_SOURCE_FILES}
 )
+
+# Copies 'octvis/resources' into 'bin/resources' for relative pathing
+add_custom_command(
+        TARGET ${PROJECT_NAME}
+        POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${CMAKE_SOURCE_DIR}/octvis/resources"
+        $<TARGET_FILE_DIR:octvis>/resources
+)
+
+target_include_directories(${PROJECT_NAME} PUBLIC public PRIVATE private)
+
+target_compile_definitions(${PROJECT_NAME} PUBLIC OCTVIS_ENABLE_ASSERTIONS)
+target_compile_definitions(${PROJECT_NAME} PUBLIC OCTVIS_ENABLE_LOGGING)
+
+target_link_libraries(${PROJECT_NAME} PUBLIC glm::glm)
+target_link_libraries(${PROJECT_NAME} PUBLIC GLEW::GLEW_static)
+
+find_package(OpenGL REQUIRED)
+target_link_libraries(${PROJECT_NAME} PUBLIC OpenGL::GL)
+
+target_link_libraries(${PROJECT_NAME} PUBLIC SDL2::SDL2)
+target_link_libraries(${PROJECT_NAME} PUBLIC imgui::imgui)
+target_link_libraries(${PROJECT_NAME} PUBLIC stb_image)
+
+################################################################################
+# TESTS
+################################################################################
+
+add_subdirectory(tests)
