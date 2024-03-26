@@ -78,6 +78,8 @@ namespace octvis {
         alignas(16) PointLight lights[LIGHT_COUNT]{};
     };
 
+    std::vector<Vertex> create_wireframe(const std::vector<Vertex>& vertices);
+
     //############################################################################//
     // | RENDER APPLICATION |
     //############################################################################//
@@ -142,6 +144,7 @@ namespace octvis {
         void debug_init_triangle();
         void debug_init_rect();
         void debug_init_cube();
+        void debug_init_sphere();
 
       public:
         void on_renderable_created(entt::basic_registry<>&, entt::entity) noexcept;

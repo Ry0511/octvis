@@ -15,6 +15,75 @@
 
 namespace octvis {
 
+    //############################################################################//
+    // | FUNCTIONS |
+    //############################################################################//
+
+    std::vector<Vertex> create_wireframe(const std::vector<Vertex>& vertices) {
+
+        std::vector<Vertex> wireframe{};
+        OCTVIS_ASSERT(
+                vertices.size() > 0 && ((vertices.size() % 3) == 0),
+                "Vertices should be triangulated; {}",
+                vertices.size()
+        );
+
+        using Edge = std::pair<Vertex, Vertex>;
+        constexpr auto edge_comparer = [](const Edge& lhs, const Edge& rhs) -> bool {
+            const glm::vec3& a = lhs.first.pos;
+            const glm::vec3& b = lhs.second.pos;
+            const glm::vec3& c = rhs.first.pos;
+            const glm::vec3& d = rhs.second.pos;
+
+            if (a.x == c.x && a.y == c.y && a.z == c.z) {
+                return (b.x < d.x)
+                       || (b.x == d.x && b.y < d.y)
+                       || (b.x == d.x && b.y == d.y && b.z < d.z);
+            } else {
+                return (a.x < c.x)
+                       || (a.x == c.x && a.y < c.y)
+                       || (a.x == c.x && a.y == c.y && a.z < c.z);
+            }
+        };
+        std::set<Edge, decltype(edge_comparer)> edges{};
+
+        for (size_t i = 0; i < vertices.size() - 3; i += 3) {
+            const Vertex& a = vertices[i];
+            const Vertex& b = vertices[i + 1];
+            const Vertex& c = vertices[i + 2];
+
+            Edge e1 = std::make_pair(a, b);
+            Edge e2 = std::make_pair(b, c);
+            Edge e3 = std::make_pair(c, a);
+
+            constexpr auto less_than = [](const Edge& lhs, const Edge& rhs) -> bool {
+                constexpr auto less = [](const glm::vec3& lhs, const glm::vec3& rhs) -> bool {
+                    return glm::length(lhs) < glm::length(rhs);
+                };
+                if (less(lhs.first.pos, rhs.first.pos)) return true;
+                if (less(rhs.first.pos, lhs.first.pos)) return false;
+                if (less(lhs.second.pos, rhs.second.pos)) return true;
+                if (less(rhs.second.pos, lhs.second.pos)) return false;
+                return false;
+            };
+
+            edges.insert(less_than(e1, e2) ? e1 : std::make_pair(e1.second, e1.first));
+            edges.insert(less_than(e2, e3) ? e2 : std::make_pair(e2.second, e2.first));
+            edges.insert(less_than(e3, e1) ? e3 : std::make_pair(e3.second, e3.first));
+        }
+
+        for (const auto& [a, b] : edges) {
+            wireframe.push_back(a);
+            wireframe.push_back(b);
+        }
+
+        return wireframe;
+    }
+
+    //############################################################################//
+    // | STATIC DATA |
+    //############################################################################//
+
     RenderApplication* RenderApplication::s_App = nullptr;
 
     //############################################################################//
@@ -74,6 +143,7 @@ namespace octvis {
         debug_init_triangle();
         debug_init_rect();
         debug_init_cube();
+        debug_init_sphere();
 
         Vertex* vertices = m_ModelBuffer->create_mapping<Vertex>();
 
@@ -139,7 +209,7 @@ namespace octvis {
                     ModelMatrix& mat = m_Registry->get<ModelMatrix>(entity);
                     Transform& trans = m_Registry->get<Transform>(entity);
                     mat.model = trans.as_matrix();
-                    mat.normal = glm::mat3{glm::transpose(glm::inverse(mat.model))};
+                    mat.normal = glm::mat3{ glm::transpose(glm::inverse(mat.model)) };
                 }
         );
         float model_calc_duration = elapsed();
@@ -273,8 +343,8 @@ namespace octvis {
                     );
                 }
             }
+            ImGui::EndChild();
         }
-        ImGui::EndChild();
         ImGui::End();
 
         m_UniformBuffer->release_mapping();
@@ -363,16 +433,13 @@ namespace octvis {
     }
 
     int RenderApplication::add_model(std::vector<Vertex>&& vertices) {
-        // Get ID
         int id = m_Models.size();
-        ModelImpl& model = m_Models.emplace_back();
 
-        // Load Vertex Data into Model
+        ModelImpl& model = m_Models.emplace_back();
         model.vertices = std::move(vertices);
         model.begin = m_ModelBuffer->length();
         model.vertex_count = model.vertices.size();
 
-        // Upload Vertex Data to GPU
         m_ModelBuffer->insert(model.vertices.data(), model.vertices.size());
 
         return id;
@@ -428,7 +495,6 @@ namespace octvis {
         add_model(std::vector<Vertex>(vertices, vertices + 3));
 
     }
-
     void RenderApplication::debug_init_rect() {
         // @off
         Vertex vertices[6]{};
@@ -472,9 +538,11 @@ namespace octvis {
 
         add_model(std::vector<Vertex>(vertices, vertices + 6));
     }
-
     void RenderApplication::debug_init_cube() {
         add_model("G:\\Dev\\CLion\\MazeVisualisation\\src\\MazeVisualisation\\Res\\Models\\TexturedCube.obj");
+    }
+    void RenderApplication::debug_init_sphere() {
+        add_model("G:\\Dev\\BlenderModels\\UVUnitSphere.obj");
     }
 
 } // octvis

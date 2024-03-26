@@ -109,6 +109,7 @@ int octvis::Context::initialise_systems() noexcept {
     OCTVIS_TRACE("Initialising ImGui");
     m_ImGuiContext = ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
+    io.IniFilename = "resources/imgui.ini";
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
@@ -221,6 +222,7 @@ void octvis::Context::start_update_loop() noexcept {
 
         // Perform Fixed Update Ticks
         Instant update_instant = Clock::now();
+        fixed_accumulator = std::clamp(fixed_accumulator, 0.0F, 0.2F);
         while (fixed_accumulator > m_Timing.fixed) {
             fixed_accumulator -= m_Timing.fixed;
             for (int j = 0; j < m_Applications.size(); ++j) {
