@@ -27,11 +27,9 @@ namespace octvis {
     // | APPLICATION OVERRIDEN |
     //############################################################################//
 
-    struct BoundBoxTag { entt::entity bound; bool is_tl; };
-
     void PhysicsSystem::on_start() noexcept {
 
-        constexpr size_t ENTITY_COUNT = 256;
+        constexpr size_t ENTITY_COUNT = 128;
         for (int i = 0; i < ENTITY_COUNT; ++i) {
             entt::entity e = m_Registry->create();
 
@@ -56,7 +54,7 @@ namespace octvis {
             renderable.use_wireframe = false;
             renderable.use_face_culling = true;
 
-            trans.position = glm::vec3{-128 + rand() % 256, 32, -128 + rand() % 256};
+            trans.position = glm::vec3{-128 + rand() % 256, 32 + rand() % 128, -128 + rand() % 256};
 
             float s = (rand() % 1200) / 100.0F;
             rb.mass = 3.0F + 1.0F * s;
@@ -107,27 +105,32 @@ namespace octvis {
 
     void PhysicsSystem::on_fixed_update() noexcept {
 
-        {
-            auto group = m_Registry->group<SphereCollider>(entt::get<Transform>);
-            group.each(
+        m_CollisionTests = 0;
+        m_CollisionsResolved = 0;
+
+        auto rectify_entity_positions = [this]() {
+
+            auto sphere_group = m_Registry->group<SphereCollider>(entt::get<Transform>);
+            sphere_group.each(
                     [](SphereCollider& collider, Transform& trans) {
                         trans.position.y = std::max(trans.position.y, collider.radius);
                         collider.centre = trans.position;
                         collider.centre = trans.position;
-                    });
-        }
-
-        {
-            auto group = m_Registry->group<BoxCollider>(entt::get<Transform>);
-            group.each(
-                    [](BoxCollider& sc, Transform& trans) {
-                        trans.position.y = std::max(trans.position.y * 0.5F, trans.scale.y);
-                        glm::vec3 half_scale = trans.scale;
-                        sc.min = trans.position - half_scale;
-                        sc.max = trans.position + half_scale;
                     }
             );
-        }
+
+            auto box_group = m_Registry->group<BoxCollider>(entt::get<Transform>);
+            box_group.each(
+                    [](BoxCollider& sc, Transform& trans) {
+                        trans.position.y = std::max(trans.position.y, trans.scale.y);
+                        sc.min = trans.position - trans.scale;
+                        sc.max = trans.position + trans.scale;
+                    }
+            );
+
+        };
+
+        rectify_entity_positions();
 
         // Compute Physics
         start_timer();
@@ -136,24 +139,68 @@ namespace octvis {
 
         // Resolve Collisions
         start_timer();
-        resolve_collisions_linearly();
+        if (m_UseOctree) {
+            resolve_collisions_accelerated();
+        } else {
+            resolve_collisions_linearly();
+        }
         m_CollisionDuration = elapsed();
 
+        rectify_entity_positions();
     }
 
     void PhysicsSystem::on_update() noexcept {
         if (ImGui::Begin("Physics System")) {
-            ImGui::Text("Physics Update   %.4f", m_PhysicsDuration);
-            ImGui::Text("Collision Update %.4f", m_CollisionDuration);
+            ImGui::Text("Physics Update      %.4f", m_PhysicsDuration);
+            ImGui::Text("Collision Update    %.4f", m_CollisionDuration);
+            ImGui::Text("Collision Tests     %llu", m_CollisionTests);
+            ImGui::Text("Collisions Resolved %llu", m_CollisionsResolved);
+
+            ImGui::Checkbox("Use Octree?", &m_UseOctree);
+            ImGui::Checkbox("Render Bounding Box?", &m_RenderAsBoundingBox);
         }
         ImGui::End();
+
+        // Render Wireframe of Renderables
+        auto view = m_Registry->view<Renderable, Transform>();
+        for (entt::entity e0 : view) {
+            struct Backup { Renderable re; Transform tr; };
+            Renderable& re = view.get<Renderable>(e0);
+            Transform& tr = view.get<Transform>(e0);
+            Backup* back = m_Registry->try_get<Backup>(e0);
+
+            if (m_RenderAsBoundingBox) {
+                if (back == nullptr) {
+                    Backup& backup = m_Registry->emplace<Backup>(e0);
+                    backup.re = re;
+                    backup.tr = tr;
+                }
+                re.model_id = 2;
+                re.use_wireframe = true;
+                re.use_face_culling = false;
+                re.use_depth_test = false;
+                re.colour = glm::vec4{1.0F, 0.0F, 1.0F, 1.0F};
+                glLineWidth(2.0F);
+
+                // Restore
+            } else if (back != nullptr) {
+                re = back->re;
+                tr.scale = back->tr.scale;
+                tr.rotation = back->tr.rotation;
+                glLineWidth(1.0F);
+            }
+        }
 
         if (InputSystem::is_key_released(SDLK_t)) {
             auto& cam = m_Registry->get<Camera>(m_Registry->view<Camera>().front());
             m_Registry->view<RigidBody, Transform>().each(
-                    [&cam](RigidBody& rb, Transform& tr) {
-                        glm::vec3 dir = glm::normalize(cam.get_position() - tr.position);
-                        rb.acceleration += dir * rb.mass * 500.0F;
+                    [](RigidBody& rb, Transform& tr) {
+                        tr.position.y = (64 + rand() % 512);
+                        rb.acceleration = glm::vec3{
+                            float(-100 + rand() % 200) * 0.01F,
+                            float(-100 + rand() % 200) * 0.01F,
+                            float(-100 + rand() % 200) * 0.01F
+                        } * 100.0F;
                     }
             );
         }
@@ -221,20 +268,79 @@ namespace octvis {
 
         auto group = m_Registry->view<ColliderTag, RigidBody, Transform>();
 
-        m_CollisionTests = 0;
-        m_CollisionsResolved = 0;
-
         for (auto [e0, rb0, tr0] : group.each()) {
             for (auto [e1, rb1, tr1] : group.each()) {
                 if (e0 == e1) continue;
                 if (!is_colliding(e0, e1)) continue;
                 resolve_collision(e0, rb0, tr0, e1, rb1, tr1);
             }
-            rb0.acceleration = glm::clamp(rb0.acceleration, -100.0F, 100.0F);
         }
     }
 
     void PhysicsSystem::resolve_collisions_accelerated() noexcept {
+
+        using Node = Octree<entt::entity>::Node;
+        Octree<entt::entity> tree{glm::vec3{0.0F, 2048, 0.0F}, 2048.0F, 3};
+
+        auto group = m_Registry->group<ColliderTag>(entt::get<RigidBody, Transform>);
+
+        constexpr auto get_bounds = [](SphereCollider* sphere, BoxCollider* box) {
+            BoxCollider collider{};
+
+            if (sphere != nullptr) {
+                collider.min = sphere->centre - (sphere->radius * 2.0F);
+                collider.max = sphere->centre + (sphere->radius * 2.0F);
+
+            } else if (box != nullptr) {
+                collider.min = box->min;
+                collider.max = box->max;
+            }
+
+            return collider;
+        };
+
+        // Populate Tree
+        for (auto [e0, rb0, tr0] : group.each()) {
+            SphereCollider* sphere = m_Registry->try_get<SphereCollider>(e0);
+            BoxCollider* box = m_Registry->try_get<BoxCollider>(e0);
+            BoxCollider bounds = get_bounds(sphere, box);
+            tree.insert(e0, bounds.min, bounds.max);
+        }
+
+        // Collision Detection & Resolution Using Octree
+        for (auto [e0, rb0, tr0] : group.each()) {
+            SphereCollider* sphere = m_Registry->try_get<SphereCollider>(e0);
+            BoxCollider* box = m_Registry->try_get<BoxCollider>(e0);
+            BoxCollider bounds = get_bounds(sphere, box);
+
+            Node* node = tree.search(
+                    [&bounds](Node& node) {
+                        glm::vec3 min, max;
+                        min = node.centre - node.size;
+                        max = node.centre + node.size;
+                        return collision::box_intersects_box(
+                                bounds.min, bounds.max,
+                                min, max
+                        );
+                    }
+            );
+
+            if (node == nullptr) continue;
+
+            node->for_each(
+                    [this, &group, e0, &rb0, &tr0](entt::entity e1) {
+                        if (e0 == e1) return;
+                        if (!this->is_colliding(e0, e1)) return;
+
+                        RigidBody& rb1 = group.get<RigidBody>(e1);
+                        Transform& tr1 = group.get<Transform>(e1);
+                        resolve_collision(
+                                e0, rb0, tr0,
+                                e1, rb1, tr1
+                        );
+                    }
+            );
+        }
 
     }
 
@@ -254,9 +360,12 @@ namespace octvis {
         if (overlap <= 0.0) return;
 
         // Resolve Collision
-        glm::vec3 separation_vec = collision_normal * overlap * 0.5f;
-        tr0.position -= separation_vec;
-        tr1.position += separation_vec;
+        glm::vec3 separation_vec = collision_normal * overlap * 0.5F;
+        tr0.position -= (separation_vec + 0.05F);
+        tr1.position += (separation_vec + 0.05F);
+
+        c0.centre = tr0.position;
+        c1.centre = tr1.position;
 
         // Collision Impulse Response
         glm::vec3 relative_velocity = rb1.velocity - rb0.velocity;
@@ -285,7 +394,7 @@ namespace octvis {
         // Resolve Collision
         float displacement_magnitude = c0.radius - glm::sqrt(distance_squared);
         glm::vec3 displacement = glm::normalize(c0.centre - glm::vec3(x, y, z)) * displacement_magnitude;
-        tr0.position += displacement;
+        tr0.position += displacement + 0.01F;
 
         // Update Colliders
         c0.centre = tr0.position;
@@ -309,9 +418,9 @@ namespace octvis {
 
         // Compute the overlapping distance for each axis
         glm::vec3 overlap = glm::vec3{
-                half_size_sum.x - abs(distance.x),
-                half_size_sum.y - abs(distance.y),
-                half_size_sum.z - abs(distance.z)
+                half_size_sum.x - std::abs(distance.x),
+                half_size_sum.y - std::abs(distance.y),
+                half_size_sum.z - std::abs(distance.z)
         };
 
         if (overlap.x > 0 && overlap.y > 0 && overlap.z > 0) {

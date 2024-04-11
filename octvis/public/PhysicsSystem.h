@@ -70,6 +70,10 @@ namespace octvis {
         size_t m_CollisionTests;
         size_t m_CollisionsResolved;
 
+      private:
+        bool m_UseOctree = true;
+        bool m_RenderAsBoundingBox = false;
+
       public:
         PhysicsSystem() noexcept;
 

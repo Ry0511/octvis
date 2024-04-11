@@ -12,6 +12,7 @@
 #include "glm/glm.hpp"
 
 #include <vector>
+#include <unordered_set>
 #include <type_traits>
 
 namespace octvis {
@@ -129,12 +130,13 @@ namespace octvis {
         // TODO: Implement Basic Collision Detection & Resolution
 
       public:
-        struct alignas(64) Node { // @off
-            glm::vec3         centre;
-            float             size;
-            int               depth;
-            std::vector<Node> children;
-            std::vector<T>    data;
+        struct Node { // @off
+            Node*                 parent;
+            glm::vec3             centre;
+            float                 size;
+            int                   depth;
+            std::vector<Node>     children;
+            std::unordered_set<T> data;
 
           public:
             inline Node(
@@ -151,6 +153,39 @@ namespace octvis {
 
             inline bool is_inside(const glm::vec3& centre_, float size_) const noexcept {
                 return collision::cube_intersects_cube(centre_, size_, centre, size * 2.0F);
+            }
+
+            template<class Function>
+            inline void for_each(Function fn) {
+
+                struct {
+                    void recurse(Function fn, Node* begin, Node* end) {
+                        for (Node* it = begin; it != end; ++it) {
+                            for (auto&& elem : it->data) {
+                                std::invoke(fn, elem);
+                            }
+                            if (it->children.empty()) continue;
+                            recurse(
+                                    fn,
+                                    &it->children[0],
+                                    &it->children[it->children.size()-1]
+                            );
+                        }
+                    }
+                } impl;
+
+                if (children.empty()) {
+                    for (auto&& elem : data) {
+                        std::invoke(fn, elem);
+                    }
+                    return;
+                }
+
+                impl.recurse(
+                        fn,
+                        &children[0],
+                        &children[children.size() - 1]
+                );
             }
 
           public:
@@ -214,8 +249,43 @@ namespace octvis {
         void rebuild(const glm::vec3& centre, const float size, int depth = DEFAULT_DEPTH);
 
       public:
+        inline bool insert(const T& elem, const glm::vec3& point, float size) {
+            Node* node = search(
+                    [&point, size](Node& node) {
+                        return collision::box_intersects_box(
+                                (point - size),
+                                (point + size),
+                                (node.centre - node.size),
+                                (node.centre + node.size)
+                        );
+                    }
+            );
+            if (node == nullptr) return false;
+            node->children.push_back(elem);
+            return true;
+        }
+
+        inline bool insert(const T& elem, const glm::vec3& min, const glm::vec3& max) {
+            Node* node = search(
+                    [&elem, &min, &max](Node& node) {
+                        if (!collision::box_intersects_box(
+                                min, max,
+                                node.centre - node.size,
+                                node.centre + node.size
+                        )) {
+                            return false;
+                        }
+
+                        node.data.insert(elem);
+                        return true;
+                    }
+            );
+            return node != nullptr;
+        }
+
+      public:
         template<class Function>
-        inline void for_each(Function&& fn) noexcept {
+        inline void for_each(Function&& fn, bool skip_root = false) noexcept {
             std::vector<Node>& children = m_Root.children;
             if (children.empty()) return;
 
@@ -245,17 +315,26 @@ namespace octvis {
                 }
             } impl;
 
-            std::invoke(std::forward<Function>(fn), m_Root);
-            impl.recurse(std::forward<Function>(fn), children.data(), children.data() + CHILD_COUNT, 0, m_Depth);
+            if (!skip_root) {
+                std::invoke(std::forward<Function>(fn), m_Root);
+            }
+
+            impl.recurse(
+                    std::forward<Function>(fn),
+                    children.data(),
+                    children.data() + CHILD_COUNT,
+                    0,
+                    m_Depth
+            );
 
         }
 
         template<class Predicate>
-        inline Node* search(Predicate&& fn, int max_depth = -1) noexcept {
+        inline Node* search(Predicate fn, int max_depth = -1) noexcept {
 
             struct {
                 inline Node* search(
-                        Predicate&& fn,
+                        Predicate fn,
                         Node* begin,
                         Node* end,
                         int depth,
@@ -267,15 +346,15 @@ namespace octvis {
 
                     for (Node* it = begin; it != end; ++it) {
 
-                        const Node& node = *it;
+                        Node& node = *it;
 
                         if (!std::invoke(fn, node)) continue;
                         if (node.children.empty()) return &node;
 
                         return search(
-                                std::forward<Predicate>(fn),
-                                node.children.begin(),
-                                node.children.end(),
+                                fn,
+                                &node.children[0],
+                                &node.children[node.children.size() - 1],
                                 depth + 1,
                                 max_depth,
                                 &node
@@ -288,9 +367,9 @@ namespace octvis {
             } impl;
 
             return impl.search(
-                    std::forward<Predicate>(fn),
-                    m_Root.children.begin(),
-                    m_Root.children.end(),
+                    fn,
+                    &m_Root.children[0],
+                    &m_Root.children[m_Root.children.size() - 1],
                     0,
                     (max_depth == -1) ? m_Depth : max_depth
             );
@@ -333,6 +412,7 @@ namespace octvis {
         // Initialise Root and then walk the tree
         m_Root.centre = centre;
         m_Root.size = size;
+        m_Root.parent = nullptr;
         m_Depth = depth;
 
         // Initialise Root & Initialise Children
@@ -340,6 +420,14 @@ namespace octvis {
         m_Root.divide(m_Root.centre, m_Root.size);
         Node* data = m_Root.children.data();
         impl.recurse(data, data + CHILD_COUNT, 0, m_Depth);
+
+        for_each(
+                [](Node& node) {
+                    for (Node& child : node.children) {
+                        child.parent = &node;
+                    }
+                }
+        );
 
     }
 

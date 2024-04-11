@@ -30,8 +30,8 @@ class TestApp : public Application {
         Camera& camera = m_Registry->emplace<Camera>(m_CameraEntity);
 
         camera.set_projection(90.0F, 0.1F, 1000.0F, 800.0F / 600.0F);
-        camera.set_position(glm::vec3{ 0, 0, -5 });
-        camera.look_at(glm::vec3{ 0, 0, 0 });
+        camera.set_position(glm::vec3{0, 0, -5});
+        camera.look_at(glm::vec3{0, 0, 0});
 
         // Floor
         entt::entity floor = m_Registry->create();
@@ -40,21 +40,22 @@ class TestApp : public Application {
 
         Renderable& r = m_Registry->emplace<Renderable>(floor);
         r.model_id = 2;
-        r.colour = glm::vec4{ 1 };
+        r.colour = glm::vec4{0.77F,0.77F,0.77F, 1.0F};
         r.use_depth_test = true;
         r.use_face_culling = true;
         r.use_wireframe = false;
 
         Transform& t = m_Registry->emplace<Transform>(floor);
-        t.position = glm::vec3{ 0.0F, -1.0F, 0.0F };
-        t.scale = glm::vec3{ 1000.0F, 1.0F, 1000.0F };
+        t.position = glm::vec3{0.0F, -1.0F, 0.0F};
+        t.scale = glm::vec3{1000.0F, 1.0F, 1000.0F};
 
         for (int i = 0; i < RenderState::LIGHT_COUNT; ++i) {
             entt::entity e = m_Registry->create();
             m_Registry->emplace<LightTag>(e);
             PointLight& light = m_Registry->emplace<PointLight>(e);
-            light.position = glm::vec3{ -5 + rand() % 5, 10.0F, -5 + rand() % 5 };
-            light.colour = glm::vec3{ 1.0F, 1.0F, 1.0F };
+            light.position = glm::vec3{-5 + rand() % 5, 10.0F, -5 + rand() % 5};
+            light.colour = glm::vec3{1.0F, 1.0F, 1.0F};
+            light.diffuse *= 1.35F;
         }
 
         m_Timing->fixed = 1.0F / 60.0F;
@@ -67,7 +68,18 @@ class TestApp : public Application {
         Camera& cam = m_Registry->get<Camera>(m_CameraEntity);
 
         PointLight& pl = m_Registry->get<PointLight>(m_Registry->view<PointLight>().front());
-        pl.position = cam.get_position() + glm::vec3{ 0, 1.5F, -0.8F };
+        pl.position = cam.get_position() + glm::vec3{0, 1.5F, -0.8F};
+
+        m_Registry->view<PointLight>().each(
+                [&cam](PointLight& light) {
+                    static size_t index;
+                    index = 0;
+                    srand(index);
+                    ++index;
+                    float radius = -8 + rand() % 16;
+                    light.position = cam.get_position() + glm::vec3{radius, radius * 0.5F, radius};
+                }
+        );
 
         int width, height;
         SDL_GetWindowSize(m_Window->handle, &width, &height);
@@ -111,7 +123,7 @@ class TestApp : public Application {
             cam.set_move_xz(is_movement_xz);
         }
 
-        if (InputSystem::is_key_released(SDLK_r)) cam.look_at(glm::vec3{ 0 });
+        if (InputSystem::is_key_released(SDLK_r)) cam.look_at(glm::vec3{0});
 
         if (ImGui::Begin("Debug")) {
             ImGui::Text("W => %s", InputSystem::is_key_pressed(SDLK_w) ? "Pressed" : "Released");
