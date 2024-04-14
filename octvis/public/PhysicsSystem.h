@@ -21,6 +21,18 @@ namespace octvis {
 
     // @off
 
+    struct CollisionTracker {
+        // Colliding Entity, Collision Checks, Actual Collisions
+        std::function<void(entt::entity, size_t, size_t)> callback;
+
+        size_t num_collision_tests; // Number of times this entity has been checked for a collision
+        size_t num_collisions;      // Actual number of collisions
+
+        inline void operator()(entt::entity entity) const noexcept {
+            callback(entity, num_collision_tests, num_collisions);
+        }
+    };
+
     struct BoxCollider {
         glm::vec3 min;
         glm::vec3 max;
@@ -69,6 +81,7 @@ namespace octvis {
         float m_CollisionDuration;
         size_t m_CollisionTests;
         size_t m_CollisionsResolved;
+        int m_FixedUpdateFramerate;
 
       private:
         bool m_UseOctree = true;

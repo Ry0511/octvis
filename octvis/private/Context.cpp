@@ -205,8 +205,8 @@ void octvis::Context::start_update_loop() noexcept {
         after = Clock::now();
 
         // Total Runtime & Delta Time
-        m_Timing.theta = FloatDuration{ after - start }.count();
-        m_Timing.delta = FloatDuration{ after - before }.count();
+        m_Timing.theta = FloatDuration{after - start}.count();
+        m_Timing.delta = FloatDuration{after - before}.count();
         fixed_accumulator += m_Timing.delta;
         ++m_Timing.delta_ticks;
 
@@ -230,14 +230,14 @@ void octvis::Context::start_update_loop() noexcept {
             }
             ++m_Timing.fixed_ticks;
         }
-        m_Timing.fixed_update_total_time = FloatDuration{ Clock::now() - update_instant }.count();
+        m_Timing.fixed_update_total_time = FloatDuration{Clock::now() - update_instant}.count();
 
         // Perform Updates
         update_instant = Clock::now();
         for (int i = 0; i < m_Applications.size(); ++i) {
             m_Applications[i]->on_update();
         }
-        m_Timing.update_total_time = FloatDuration{ Clock::now() - update_instant }.count();
+        m_Timing.update_total_time = FloatDuration{Clock::now() - update_instant}.count();
 
         // Render ImGui
         ImGui::Render();

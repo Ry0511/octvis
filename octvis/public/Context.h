@@ -73,9 +73,9 @@ namespace octvis {
       // @on
 
       private:
-        entt::registry m_Registry;
         std::vector<std::unique_ptr<Application>> m_Applications;
         bool m_IsApplicationRunning;
+        entt::registry m_Registry;
 
       public:
         Context() noexcept = default;

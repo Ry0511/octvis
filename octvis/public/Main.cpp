@@ -40,7 +40,7 @@ class TestApp : public Application {
 
         Renderable& r = m_Registry->emplace<Renderable>(floor);
         r.model_id = 2;
-        r.colour = glm::vec4{0.77F,0.77F,0.77F, 1.0F};
+        r.colour = glm::vec4{0.77F, 0.77F, 0.77F, 1.0F};
         r.use_depth_test = true;
         r.use_face_culling = true;
         r.use_wireframe = false;
@@ -58,6 +58,35 @@ class TestApp : public Application {
             light.diffuse *= 1.35F;
         }
 
+
+        entt::entity player_collider = m_Registry->create();
+
+        m_Registry->emplace<CameraTag>(player_collider);
+        m_Registry->emplace<ColliderTag>(player_collider);
+        m_Registry->emplace<RenderableTag>(player_collider);
+        m_Registry->emplace<Transform>(player_collider);
+        m_Registry->emplace<LineRenderable>(player_collider);
+        m_Registry->emplace<BoxCollider>(player_collider);
+
+        RigidBody& rb = m_Registry->emplace<RigidBody>(player_collider);
+        rb.mass = 0;
+        rb.friction = 0;
+
+        CollisionTracker& tracker = m_Registry->emplace<CollisionTracker>(player_collider);
+        tracker.callback = [player_collider, this](entt::entity e1, size_t num_tests, size_t num_collisions) {
+
+            Transform& player_pos = m_Registry->get<Transform>(player_collider);
+            Transform& collidee_pos = m_Registry->get<Transform>(e1);
+            LineRenderable& lines = m_Registry->get<LineRenderable>(player_collider);
+            lines.colour = glm::vec4{0.33F, 0.8F, 1.0F, 1.0F};
+
+            if (num_tests == 1) lines.vertices.clear();
+            lines.vertices.push_back(player_pos.position - glm::vec3{0.0F, 1.0F, 0.0F});
+            lines.vertices.push_back(collidee_pos.position);
+
+        };
+
+
         m_Timing->fixed = 1.0F / 60.0F;
     }
 
@@ -66,6 +95,17 @@ class TestApp : public Application {
         ImGui::DockSpaceOverViewport(nullptr, ImGuiDockNodeFlags_PassthruCentralNode);
 
         Camera& cam = m_Registry->get<Camera>(m_CameraEntity);
+
+        {
+            m_Registry->view<CameraTag, LineRenderable, Transform, BoxCollider>().each(
+                    [&cam](LineRenderable&, Transform& tr, BoxCollider& box) {
+                        tr.position = cam.get_position();
+                        const glm::vec3 size{0.1F, 1.0F, 0.1F};
+                        box.min = tr.position - size;
+                        box.max = tr.position + size;
+                    }
+            );
+        }
 
         PointLight& pl = m_Registry->get<PointLight>(m_Registry->view<PointLight>().front());
         pl.position = cam.get_position() + glm::vec3{0, 1.5F, -0.8F};

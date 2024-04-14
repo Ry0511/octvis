@@ -11,6 +11,7 @@
 
 #include "glm/glm.hpp"
 
+#include <algorithm>
 #include <vector>
 #include <unordered_set>
 #include <type_traits>

@@ -15,7 +15,7 @@
 
 namespace octvis {
 
-    PhysicsSystem::PhysicsSystem() noexcept: Application("Physics System") {
+    PhysicsSystem::PhysicsSystem() noexcept: Application("Physics System"), m_FixedUpdateFramerate(60) {
 
     }
 
@@ -29,7 +29,7 @@ namespace octvis {
 
     void PhysicsSystem::on_start() noexcept {
 
-        constexpr size_t ENTITY_COUNT = 128;
+        constexpr size_t ENTITY_COUNT = 16;
         for (int i = 0; i < ENTITY_COUNT; ++i) {
             entt::entity e = m_Registry->create();
 
@@ -108,6 +108,16 @@ namespace octvis {
         m_CollisionTests = 0;
         m_CollisionsResolved = 0;
 
+        {
+            auto group = m_Registry->group<CollisionTracker>();
+            group.each(
+                    [](CollisionTracker& tracker) {
+                        tracker.num_collision_tests = 0;
+                        tracker.num_collisions = 0;
+                    }
+            );
+        }
+
         auto rectify_entity_positions = [this]() {
 
             auto sphere_group = m_Registry->group<SphereCollider>(entt::get<Transform>);
@@ -156,6 +166,16 @@ namespace octvis {
             ImGui::Text("Collision Tests     %llu", m_CollisionTests);
             ImGui::Text("Collisions Resolved %llu", m_CollisionsResolved);
 
+            if (ImGui::SliderInt(
+                    "Fixed Update Framerate",
+                    &m_FixedUpdateFramerate,
+                    20,
+                    300,
+                    "%d",
+                    ImGuiSliderFlags_AlwaysClamp
+            )) {
+                m_Timing->fixed = 1.0F / float(m_FixedUpdateFramerate);
+            }
             ImGui::Checkbox("Use Octree?", &m_UseOctree);
             ImGui::Checkbox("Render Bounding Box?", &m_RenderAsBoundingBox);
         }
@@ -197,9 +217,9 @@ namespace octvis {
                     [](RigidBody& rb, Transform& tr) {
                         tr.position.y = (64 + rand() % 512);
                         rb.acceleration = glm::vec3{
-                            float(-100 + rand() % 200) * 0.01F,
-                            float(-100 + rand() % 200) * 0.01F,
-                            float(-100 + rand() % 200) * 0.01F
+                                float(-100 + rand() % 200) * 0.01F,
+                                float(-100 + rand() % 200) * 0.01F,
+                                float(-100 + rand() % 200) * 0.01F
                         } * 100.0F;
                     }
             );
@@ -269,9 +289,35 @@ namespace octvis {
         auto group = m_Registry->view<ColliderTag, RigidBody, Transform>();
 
         for (auto [e0, rb0, tr0] : group.each()) {
+
+            CollisionTracker* e0_tracker = m_Registry->try_get<CollisionTracker>(e0);
+
             for (auto [e1, rb1, tr1] : group.each()) {
                 if (e0 == e1) continue;
+                CollisionTracker* e1_tracker = m_Registry->try_get<CollisionTracker>(e1);
+
+                if (e0_tracker != nullptr) {
+                    e0_tracker->num_collision_tests++;
+                    (*e0_tracker)(e1);
+                }
+
+                if (e1_tracker != nullptr) {
+                    e1_tracker->num_collision_tests++;
+                    (*e1_tracker)(e0);
+                }
+
                 if (!is_colliding(e0, e1)) continue;
+
+                if (e0_tracker != nullptr) {
+                    e0_tracker->num_collisions++;
+                    (*e0_tracker)(e1);
+                }
+
+                if (e1_tracker != nullptr) {
+                    e1_tracker->num_collisions++;
+                    (*e1_tracker)(e0);
+                }
+
                 resolve_collision(e0, rb0, tr0, e1, rb1, tr1);
             }
         }
