@@ -211,5 +211,6 @@ int main(int, char**) {
     ctx.emplace_app<PhysicsSystem>();
     ctx.emplace_app<RenderApplication>();
     if (!ctx.start()) return -1;
+
     return 0;
 }

@@ -284,6 +284,19 @@ namespace octvis {
     // | METHODS |
     //############################################################################//
 
+    void increment_tests(CollisionTracker* tracker, entt::entity entity) {
+        if (tracker != nullptr) {
+            tracker->num_collision_tests++;
+            (*tracker)(entity);
+        }
+    }
+
+    void increment_collisions(CollisionTracker* tracker) {
+        if (tracker != nullptr) {
+            tracker->num_collisions++;
+        }
+    }
+
     void PhysicsSystem::resolve_collisions_linearly() noexcept {
 
         auto group = m_Registry->view<ColliderTag, RigidBody, Transform>();
@@ -294,30 +307,16 @@ namespace octvis {
 
             for (auto [e1, rb1, tr1] : group.each()) {
                 if (e0 == e1) continue;
+
                 CollisionTracker* e1_tracker = m_Registry->try_get<CollisionTracker>(e1);
 
-                if (e0_tracker != nullptr) {
-                    e0_tracker->num_collision_tests++;
-                    (*e0_tracker)(e1);
-                }
+                increment_tests(e0_tracker, e1);
+                increment_tests(e1_tracker, e0);
 
-                if (e1_tracker != nullptr) {
-                    e1_tracker->num_collision_tests++;
-                    (*e1_tracker)(e0);
-                }
+                if (!is_colliding(e0, e1))continue;
 
-                if (!is_colliding(e0, e1)) continue;
-
-                if (e0_tracker != nullptr) {
-                    e0_tracker->num_collisions++;
-                    (*e0_tracker)(e1);
-                }
-
-                if (e1_tracker != nullptr) {
-                    e1_tracker->num_collisions++;
-                    (*e1_tracker)(e0);
-                }
-
+                increment_collisions(e0_tracker);
+                increment_collisions(e1_tracker);
                 resolve_collision(e0, rb0, tr0, e1, rb1, tr1);
             }
         }
@@ -373,10 +372,21 @@ namespace octvis {
 
             if (node == nullptr) continue;
 
+            CollisionTracker* e0_tracker = m_Registry->try_get<CollisionTracker>(e0);
+
             node->for_each(
-                    [this, &group, e0, &rb0, &tr0](entt::entity e1) {
+                    [this, &group, e0, &rb0, &tr0, e0_tracker](entt::entity e1) {
                         if (e0 == e1) return;
+
+                        CollisionTracker* e1_tracker = m_Registry->try_get<CollisionTracker>(e1);
+
+                        increment_tests(e0_tracker, e1);
+                        increment_tests(e1_tracker, e0);
+
                         if (!this->is_colliding(e0, e1)) return;
+
+                        increment_collisions(e0_tracker);
+                        increment_collisions(e1_tracker);
 
                         RigidBody& rb1 = group.get<RigidBody>(e1);
                         Transform& tr1 = group.get<Transform>(e1);
@@ -390,9 +400,9 @@ namespace octvis {
 
     }
 
-    //############################################################################//
-    // | COLLISION HANDLING |
-    //############################################################################//
+//############################################################################//
+// | COLLISION HANDLING |
+//############################################################################//
 
     inline void resolve_sphere_vs_sphere(
             SphereCollider& c0, RigidBody& rb0, Transform& tr0,
