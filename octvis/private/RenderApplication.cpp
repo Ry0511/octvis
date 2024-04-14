@@ -445,12 +445,15 @@ namespace octvis {
         ctx.line_states->clear();
         ctx.commands->clear();
 
+        unsigned int total_line_renderables = 0;
         group.each(
-                [&ctx](LineRenderable& line) {
+                [&ctx, &total_line_renderables](LineRenderable& line) {
+                    if (!line.enabled || line.vertices.empty()) return;
                     MultiDrawCommand cmd{
                             .count = (unsigned int) line.vertices.size(),
                             .instance_count = 1,
-                            .first = (unsigned int) ctx.lines->length()
+                            .first = (unsigned int) ctx.lines->length(),
+                            .base_instance = total_line_renderables++
                     };
                     ctx.lines->insert(line.vertices.data(), line.vertices.size());
                     ctx.commands->insert(&cmd, 1);
@@ -462,6 +465,10 @@ namespace octvis {
                     ctx.line_states->insert(&state, 1);
                 }
         );
+
+        if (ctx.commands->empty()) {
+            return;
+        }
 
         ctx.shader->activate();
         ctx.state->bind();

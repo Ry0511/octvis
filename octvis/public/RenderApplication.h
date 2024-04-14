@@ -70,6 +70,7 @@ namespace octvis {
     };
 
     struct LineRenderable {
+        bool enabled{true};
         std::vector<glm::vec3> vertices{};
         float line_width{2.0F};
         glm::vec4 colour{1.0F, 0.0F, 1.0F, 1.0F};

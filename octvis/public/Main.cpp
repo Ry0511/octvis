@@ -58,7 +58,6 @@ class TestApp : public Application {
             light.diffuse *= 1.35F;
         }
 
-
         entt::entity player_collider = m_Registry->create();
 
         m_Registry->emplace<CameraTag>(player_collider);
@@ -86,7 +85,6 @@ class TestApp : public Application {
 
         };
 
-
         m_Timing->fixed = 1.0F / 60.0F;
     }
 
@@ -98,11 +96,17 @@ class TestApp : public Application {
 
         {
             m_Registry->view<CameraTag, LineRenderable, Transform, BoxCollider>().each(
-                    [&cam](LineRenderable&, Transform& tr, BoxCollider& box) {
+                    [&cam](LineRenderable& line, Transform& tr, BoxCollider& box) {
                         tr.position = cam.get_position();
-                        const glm::vec3 size{0.1F, 1.0F, 0.1F};
+                        const glm::vec3 size{0.1F, 2.0F, 0.1F};
                         box.min = tr.position - size;
                         box.max = tr.position + size;
+
+                        if (ImGui::Begin("Debug")) {
+                            ImGui::Checkbox("Render Collision Lines?", &line.enabled);
+                        }
+                        ImGui::End();
+
                     }
             );
         }
