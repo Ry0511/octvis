@@ -98,7 +98,7 @@ class TestApp : public Application {
             m_Registry->view<CameraTag, LineRenderable, Transform, BoxCollider>().each(
                     [&cam](LineRenderable& line, Transform& tr, BoxCollider& box) {
                         tr.position = cam.get_position();
-                        const glm::vec3 size{0.1F, 2.0F, 0.1F};
+                        const glm::vec3 size{0.25F, 1.0F, 0.25F};
                         box.min = tr.position - size;
                         box.max = tr.position + size;
 

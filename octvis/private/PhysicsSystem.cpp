@@ -325,7 +325,7 @@ namespace octvis {
     void PhysicsSystem::resolve_collisions_accelerated() noexcept {
 
         using Node = Octree<entt::entity>::Node;
-        Octree<entt::entity> tree{glm::vec3{0.0F, 2048, 0.0F}, 2048.0F, 3};
+        Octree<entt::entity> tree{glm::vec3{0.0F, 2048.0F, 0.0F}, 2048.0F, 3};
 
         auto group = m_Registry->group<ColliderTag>(entt::get<RigidBody, Transform>);
 

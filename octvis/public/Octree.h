@@ -267,21 +267,20 @@ namespace octvis {
         }
 
         inline bool insert(const T& elem, const glm::vec3& min, const glm::vec3& max) {
-            Node* node = search(
+            for_each(
                     [&elem, &min, &max](Node& node) {
                         if (!collision::box_intersects_box(
                                 min, max,
                                 node.centre - node.size,
                                 node.centre + node.size
                         )) {
-                            return false;
+                            return;
                         }
-
                         node.data.insert(elem);
-                        return true;
-                    }
+                    },
+                    true
             );
-            return node != nullptr;
+            return true;
         }
 
       public:

@@ -339,7 +339,7 @@ namespace octvis {
 
         if (ImGui::Begin("Renderer Debug")) {
             std::string str_hash = std::to_string(state.get_state_hash());
-            if (ImGui::BeginChild(str_hash.c_str(), {0, 160}, true)) {
+            if (ImGui::BeginChild(str_hash.c_str(), {0, 160}, true, ImGuiWindowFlags_AlwaysAutoResize)) {
                 ImGui::Text("State Hash %llu", state.get_state_hash());
                 ImGui::Text("Draw Hash %llu", state.get_hash());
                 ImGui::Text(
