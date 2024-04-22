@@ -109,6 +109,7 @@ int octvis::Context::initialise_systems() noexcept {
     OCTVIS_TRACE("Initialising ImGui");
     m_ImGuiContext = ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
+    io.IniFilename = "resources/imgui.ini";
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
@@ -204,8 +205,8 @@ void octvis::Context::start_update_loop() noexcept {
         after = Clock::now();
 
         // Total Runtime & Delta Time
-        m_Timing.theta = FloatDuration{ after - start }.count();
-        m_Timing.delta = FloatDuration{ after - before }.count();
+        m_Timing.theta = FloatDuration{after - start}.count();
+        m_Timing.delta = FloatDuration{after - before}.count();
         fixed_accumulator += m_Timing.delta;
         ++m_Timing.delta_ticks;
 
@@ -221,6 +222,7 @@ void octvis::Context::start_update_loop() noexcept {
 
         // Perform Fixed Update Ticks
         Instant update_instant = Clock::now();
+        fixed_accumulator = std::clamp(fixed_accumulator, 0.0F, 0.2F);
         while (fixed_accumulator > m_Timing.fixed) {
             fixed_accumulator -= m_Timing.fixed;
             for (int j = 0; j < m_Applications.size(); ++j) {
@@ -228,14 +230,14 @@ void octvis::Context::start_update_loop() noexcept {
             }
             ++m_Timing.fixed_ticks;
         }
-        m_Timing.fixed_update_total_time = FloatDuration{ Clock::now() - update_instant }.count();
+        m_Timing.fixed_update_total_time = FloatDuration{Clock::now() - update_instant}.count();
 
         // Perform Updates
         update_instant = Clock::now();
         for (int i = 0; i < m_Applications.size(); ++i) {
             m_Applications[i]->on_update();
         }
-        m_Timing.update_total_time = FloatDuration{ Clock::now() - update_instant }.count();
+        m_Timing.update_total_time = FloatDuration{Clock::now() - update_instant}.count();
 
         // Render ImGui
         ImGui::Render();

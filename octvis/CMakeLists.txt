@@ -20,6 +20,9 @@ set(
         public/RenderApplication.h
         public/WavefrontReader.h
         public/Utility.h
+        public/Octree.h
+        public/OctreeVisualisationApp.h
+        public/PhysicsSystem.h
 )
 
 set(
@@ -33,6 +36,9 @@ set(
         private/RenderApplication.cpp
         private/WavefrontReader.cpp
         private/Utility.cpp
+        private/Octree.cpp
+        private/OctreeVisualisationApp.cpp
+        private/PhysicsSystem.cpp
 )
 
 ################################################################################

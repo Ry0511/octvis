@@ -99,7 +99,7 @@ namespace octvis::renderer {
 
       public:
         Buffer(BufferType type);
-        ~Buffer();
+        virtual ~Buffer();
 
       public:
         Buffer(const Buffer&) = delete;

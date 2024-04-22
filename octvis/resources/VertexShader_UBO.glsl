@@ -30,7 +30,7 @@ layout(std140) uniform render_state {
 
 out vec4 oColour;
 out vec3 oPos;
-out vec3 oNormal;
+out smooth vec3 oNormal;
 out vec2 oUV;
 
 void main() {

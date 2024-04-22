@@ -61,11 +61,19 @@ namespace octvis {
             hash = (hash << 1) | static_cast<int>(use_wireframe);
             return hash;
         }
+
         size_t get_state_hash() const noexcept {
             return (static_cast<int>(use_depth_test) << 0)
                    | (static_cast<int>(use_face_culling) << 1)
                    | (static_cast<int>(use_wireframe) << 2);
         }
+    };
+
+    struct LineRenderable {
+        bool enabled{true};
+        std::vector<glm::vec3> vertices{};
+        float line_width{2.0F};
+        glm::vec4 colour{1.0F, 0.0F, 1.0F, 1.0F};
     };
 
     struct RenderState {
@@ -74,9 +82,11 @@ namespace octvis {
         alignas(64) glm::mat4 projection;
         alignas(64) glm::mat4 view;
         alignas(16) glm::vec3 cam_pos;
-        alignas(4)  int active_lights;
+        alignas(4) int active_lights;
         alignas(16) PointLight lights[LIGHT_COUNT]{};
     };
+
+    std::vector<Vertex> create_wireframe(const std::vector<Vertex>& vertices);
 
     //############################################################################//
     // | RENDER APPLICATION |
@@ -103,6 +113,40 @@ namespace octvis {
             unsigned int first;
             unsigned int base_instance = 0;
         };
+
+        struct LineRenderState {
+            alignas(64) glm::mat4 proj;
+            alignas(64) glm::mat4 view;
+        };
+
+        struct LineState {
+            float line_width{2.0F};
+            glm::vec4 colour{1.0F, 1.0F, 1.0F, 1.0F};
+        };
+
+        struct LineRenderContextTag {};
+
+        struct LineRenderContext {
+            std::shared_ptr<ShaderProgram> shader;
+            std::shared_ptr<Buffer> state;
+            std::shared_ptr<DynamicBuffer<glm::vec3>> lines;
+            std::shared_ptr<DynamicBuffer<LineState>> line_states;
+            std::shared_ptr<DynamicBuffer<MultiDrawCommand>> commands;
+            std::shared_ptr<VertexArrayObject> vao;
+
+            inline LineRenderContext()
+            : shader(std::make_shared<ShaderProgram>()),
+              state(std::make_shared<Buffer>(BufferType::UNIFORM)),
+              lines(std::make_shared<DynamicBuffer<glm::vec3>>(BufferType::ARRAY)),
+              line_states(std::make_shared<DynamicBuffer<LineState>>(BufferType::ARRAY)),
+              commands(std::make_shared<DynamicBuffer<MultiDrawCommand>>(BufferType::DRAW_INDIRECT)),
+              vao(std::make_shared<VertexArrayObject>()) {
+            }
+
+            ~LineRenderContext() {
+                OCTVIS_TRACE("DESTROYING LINE RENDER CONTEXT!");
+            }
+        };
       // @on
 
       private: // @off
@@ -115,6 +159,8 @@ namespace octvis {
         Buffer*                      m_UniformBuffer;
         Buffer*                      m_CommandBuffer;
         VertexArrayObject            m_VAO;
+
+        LineRenderContext* m_LineContext;
       // @on
 
       private:
@@ -128,33 +174,46 @@ namespace octvis {
 
       public:
         RenderApplication() noexcept;
+
         ~RenderApplication() noexcept;
 
       public:
         virtual void on_start() noexcept override;
+
         virtual void on_update() noexcept override;
 
       public:
         int add_model(const char* path);
+
         int add_model(std::vector<Vertex>&& vertices);
 
       private:
         void debug_init_triangle();
+
         void debug_init_rect();
+
         void debug_init_cube();
+
+        void debug_init_sphere();
 
       public:
         void on_renderable_created(entt::basic_registry<>&, entt::entity) noexcept;
+
         void on_renderable_updated(entt::basic_registry<>&, entt::entity) noexcept;
+
         void on_renderable_destroyed(entt::basic_registry<>&, entt::entity) noexcept;
 
       private:
         void update_render_state() noexcept;
+
         void render_instance_data(
                 const Renderable&,
                 const std::vector<MultiDrawCommand>&,
                 const std::vector<InstanceData>&
         ) noexcept;
+
+      private:
+        void render_lines() noexcept;
 
     };
 

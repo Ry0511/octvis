@@ -15,6 +15,75 @@
 
 namespace octvis {
 
+    //############################################################################//
+    // | FUNCTIONS |
+    //############################################################################//
+
+    std::vector<Vertex> create_wireframe(const std::vector<Vertex>& vertices) {
+
+        std::vector<Vertex> wireframe{};
+        OCTVIS_ASSERT(
+                vertices.size() > 0 && ((vertices.size() % 3) == 0),
+                "Vertices should be triangulated; {}",
+                vertices.size()
+        );
+
+        using Edge = std::pair<Vertex, Vertex>;
+        constexpr auto edge_comparer = [](const Edge& lhs, const Edge& rhs) -> bool {
+            const glm::vec3& a = lhs.first.pos;
+            const glm::vec3& b = lhs.second.pos;
+            const glm::vec3& c = rhs.first.pos;
+            const glm::vec3& d = rhs.second.pos;
+
+            if (a.x == c.x && a.y == c.y && a.z == c.z) {
+                return (b.x < d.x)
+                       || (b.x == d.x && b.y < d.y)
+                       || (b.x == d.x && b.y == d.y && b.z < d.z);
+            } else {
+                return (a.x < c.x)
+                       || (a.x == c.x && a.y < c.y)
+                       || (a.x == c.x && a.y == c.y && a.z < c.z);
+            }
+        };
+        std::set<Edge, decltype(edge_comparer)> edges{};
+
+        for (size_t i = 0; i < vertices.size() - 3; i += 3) {
+            const Vertex& a = vertices[i];
+            const Vertex& b = vertices[i + 1];
+            const Vertex& c = vertices[i + 2];
+
+            Edge e1 = std::make_pair(a, b);
+            Edge e2 = std::make_pair(b, c);
+            Edge e3 = std::make_pair(c, a);
+
+            constexpr auto less_than = [](const Edge& lhs, const Edge& rhs) -> bool {
+                constexpr auto less = [](const glm::vec3& lhs, const glm::vec3& rhs) -> bool {
+                    return glm::length(lhs) < glm::length(rhs);
+                };
+                if (less(lhs.first.pos, rhs.first.pos)) return true;
+                if (less(rhs.first.pos, lhs.first.pos)) return false;
+                if (less(lhs.second.pos, rhs.second.pos)) return true;
+                if (less(rhs.second.pos, lhs.second.pos)) return false;
+                return false;
+            };
+
+            edges.insert(less_than(e1, e2) ? e1 : std::make_pair(e1.second, e1.first));
+            edges.insert(less_than(e2, e3) ? e2 : std::make_pair(e2.second, e2.first));
+            edges.insert(less_than(e3, e1) ? e3 : std::make_pair(e3.second, e3.first));
+        }
+
+        for (const auto& [a, b] : edges) {
+            wireframe.push_back(a);
+            wireframe.push_back(b);
+        }
+
+        return wireframe;
+    }
+
+    //############################################################################//
+    // | STATIC DATA |
+    //############################################################################//
+
     RenderApplication* RenderApplication::s_App = nullptr;
 
     //############################################################################//
@@ -30,7 +99,8 @@ namespace octvis {
             m_InstanceBuffer(nullptr),
             m_UniformBuffer(nullptr),
             m_CommandBuffer(nullptr),
-            m_VAO() {
+            m_VAO(),
+            m_LineContext(nullptr) {
         s_App = this;
         OCTVIS_TRACE("Render Application Created; '{:p}'", (void*) s_App);
     }
@@ -40,6 +110,7 @@ namespace octvis {
         delete m_InstanceBuffer;
         delete m_UniformBuffer;
         delete m_CommandBuffer;
+        delete m_LineContext;
     }
 
     //############################################################################//
@@ -64,44 +135,17 @@ namespace octvis {
         m_VAO.init();
         m_VAO.bind();
         m_VAO.attach_buffer(*m_ModelBuffer) // Updates once per vertex
-             .add_interleaved_attributes<glm::vec3, glm::vec3, glm::vec2, glm::vec4>(0)
-             .attach_buffer(*m_InstanceBuffer) // Once Per Instance
-             .add_interleaved_attributes<glm::vec4, glm::mat4, glm::mat3>(4)
-             .set_divisor_range(4, 12, 1);
+                .add_interleaved_attributes<glm::vec3, glm::vec3, glm::vec2, glm::vec4>(0)
+                .attach_buffer(*m_InstanceBuffer) // Once Per Instance
+                .add_interleaved_attributes<glm::vec4, glm::mat4, glm::mat3>(4)
+                .set_divisor_range(4, 12, 1);
         m_VAO.unbind();
 
         // @ Testing @
         debug_init_triangle();
         debug_init_rect();
         debug_init_cube();
-
-        Vertex* vertices = m_ModelBuffer->create_mapping<Vertex>();
-
-        int id = 0;
-        for (const ModelImpl& model : m_Models) {
-            OCTVIS_TRACE("NORMAL DATA FOR MODEL {}", id++);
-            size_t len = model.begin + model.vertex_count;
-            for (size_t i = model.begin; i < (len - 2); i += 3) {
-                Vertex& a = vertices[i];
-                Vertex& b = vertices[i + 1];
-                Vertex& c = vertices[i + 2];
-
-                glm::vec3 normal = glm::normalize(glm::cross(b.pos - a.pos, c.pos - a.pos));
-
-                OCTVIS_TRACE(
-                        "Calculated Normal ( {:<2.2f}, {:<2.2f}, {:<2.2f} );"
-                        " Stored Normal ( {:<2.2f}, {:<2.2f}, {:<2.2f} )",
-                        normal.x, normal.y, normal.z,
-                        a.normal.x, a.normal.y, a.normal.z
-                );
-
-                a.normal = normal;
-                b.normal = normal;
-                c.normal = normal;
-            }
-        }
-
-        m_ModelBuffer->release_mapping();
+        debug_init_sphere();
 
     }
 
@@ -127,9 +171,7 @@ namespace octvis {
                 }
         );
 
-        if (group.size() == 0) {
-            return;
-        }
+        if (group.size() == 0) return;
 
         // This is trivially made parallel.
         start_timer();
@@ -200,13 +242,7 @@ namespace octvis {
         );
         float renderable_process_duration = elapsed();
 
-        if (ImGui::Begin("Application Timings")) {
-            ImGui::SeparatorText("Render Application");
-            ImGui::Text("Model Calculation Duration %.4f", model_calc_duration);
-            ImGui::Text("Renderable Processing Duration %.4f", renderable_process_duration);
-        }
-        ImGui::End();
-
+        start_timer();
         for (auto& [_, info] : flat_map_vec) {
 
             size_t begin = 0;
@@ -217,6 +253,20 @@ namespace octvis {
 
             render_instance_data(info.state, info.commands, info.data);
         }
+        float instanced_render_duration = elapsed();
+
+        start_timer();
+        render_lines();
+        float line_render = elapsed();
+
+        if (ImGui::Begin("Application Timings")) {
+            ImGui::SeparatorText("Render Application");
+            ImGui::Text("Model Calculation Duration %.4f", model_calc_duration);
+            ImGui::Text("Renderable Processing Duration %.4f", renderable_process_duration);
+            ImGui::Text("Group Render Duration %.4f", renderable_process_duration);
+            ImGui::Text("Line Render Duration %.4f", line_render);
+        }
+        ImGui::End();
 
     }
 
@@ -228,8 +278,8 @@ namespace octvis {
         // Use Defaults
         if (camera_group.empty()) {
             state->projection = glm::infinitePerspective(90.0F, 16.0F / 9.0F, 0.1F);
-            state->view = glm::mat4{ 1 };
-            state->cam_pos = glm::vec3{ 0 };
+            state->view = glm::mat4{1};
+            state->cam_pos = glm::vec3{0};
 
             // Use First Camera
         } else {
@@ -250,7 +300,7 @@ namespace octvis {
 
 
         if (ImGui::Begin("Renderer Debug")) {
-            if (ImGui::BeginChild("Lighting Info", { 0, 120 }, true)) {
+            if (ImGui::BeginChild("Lighting Info", {0, 120}, true)) {
                 for (int i = 0; i < state->active_lights; ++i) {
                     const PointLight& light = state->lights[i];
                     ImGui::Text(
@@ -273,8 +323,8 @@ namespace octvis {
                     );
                 }
             }
+            ImGui::EndChild();
         }
-        ImGui::EndChild();
         ImGui::End();
 
         m_UniformBuffer->release_mapping();
@@ -289,7 +339,7 @@ namespace octvis {
 
         if (ImGui::Begin("Renderer Debug")) {
             std::string str_hash = std::to_string(state.get_state_hash());
-            if (ImGui::BeginChild(str_hash.c_str(), { 0, 160 }, true)) {
+            if (ImGui::BeginChild(str_hash.c_str(), {0, 160}, true, ImGuiWindowFlags_AlwaysAutoResize)) {
                 ImGui::Text("State Hash %llu", state.get_state_hash());
                 ImGui::Text("Draw Hash %llu", state.get_hash());
                 ImGui::Text(
@@ -350,6 +400,108 @@ namespace octvis {
 
     }
 
+    void RenderApplication::render_lines() noexcept {
+        auto group = m_Registry->group<LineRenderable>();
+
+        if (m_LineContext == nullptr) {
+
+            m_LineContext = new LineRenderContext();
+            LineRenderContext& ctx = *m_LineContext;
+
+            ctx.shader->create(
+                    "resources/LineVertexShader.glsl",
+                    "resources/LineFragmentShader.glsl"
+            );
+
+            OCTVIS_ASSERT(ctx.shader->is_valid(), "Line Renderer Shader Invalid!");
+
+            ctx.state->init<LineRenderState>(1, nullptr, BufferUsage::DYNAMIC);
+            ctx.lines->reserve(128);
+            ctx.commands->reserve(16);
+            ctx.line_states->reserve(128);
+
+            ctx.vao->init();
+            ctx.vao->bind();
+
+            ctx.vao->attach_buffer(*ctx.lines)
+                    .add_interleaved_attributes<glm::vec3>(0)
+                    .attach_buffer(*ctx.line_states)
+                    .add_interleaved_attributes<glm::vec4, float>(1)
+                    .set_divisor_range(1, 3, 1);
+            ctx.vao->unbind();
+        }
+
+        LineRenderContext& ctx = *m_LineContext;
+
+        {
+            LineRenderState* state = ctx.state->create_mapping<LineRenderState>();
+            const Camera& main_camera = m_Registry->get<Camera>(m_Registry->view<CameraTag, Camera>().front());
+            state->proj = main_camera.get_projection();
+            state->view = main_camera.get_view_matrix();
+            ctx.state->release_mapping();
+        }
+
+        ctx.lines->clear();
+        ctx.line_states->clear();
+        ctx.commands->clear();
+
+        unsigned int total_line_renderables = 0;
+        group.each(
+                [&ctx, &total_line_renderables](LineRenderable& line) {
+                    if (!line.enabled || line.vertices.empty()) return;
+                    MultiDrawCommand cmd{
+                            .count = (unsigned int) line.vertices.size(),
+                            .instance_count = 1,
+                            .first = (unsigned int) ctx.lines->length(),
+                            .base_instance = total_line_renderables++
+                    };
+                    ctx.lines->insert(line.vertices.data(), line.vertices.size());
+                    ctx.commands->insert(&cmd, 1);
+
+                    LineState state{
+                            .line_width = line.line_width,
+                            .colour = line.colour
+                    };
+                    ctx.line_states->insert(&state, 1);
+                }
+        );
+
+        if (ctx.commands->empty()) {
+            return;
+        }
+
+        ctx.shader->activate();
+        ctx.state->bind();
+        ctx.shader->set_ubo(*ctx.state, 0, "render_state");
+        ctx.commands->bind();
+        ctx.vao->bind();
+
+        float original_line_width, original_point_size;
+        GL_CALL(glGetFloatv(GL_LINE_WIDTH, &original_line_width));
+        GL_CALL(glLineWidth(2.0F));
+        GL_CALL(glGetFloatv(GL_POINT_SIZE, &original_point_size));
+        GL_CALL(glPointSize(4.0F));
+        GL_CALL(glDisable(GL_CULL_FACE));
+        GL_CALL(glEnable(GL_DEPTH_TEST));
+        GL_CALL(glEnable(GL_BLEND));
+        GL_CALL(glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA));
+        GL_CALL(glEnable(GL_LINE_SMOOTH));
+
+        GL_CALL(glMultiDrawArraysIndirect(GL_LINES, nullptr, ctx.commands->length(), 0));
+
+        GL_CALL(glLineWidth(original_line_width));
+        GL_CALL(glPointSize(original_point_size));
+        GL_CALL(glEnable(GL_CULL_FACE));
+        GL_CALL(glDisable(GL_BLEND));
+        GL_CALL(glDisable(GL_LINE_SMOOTH));
+        GL_CALL(glDisable(GL_DEPTH_TEST));
+
+        ctx.vao->unbind();
+        ctx.commands->unbind();
+        ctx.state->unbind();
+        ctx.shader->deactivate();
+
+    }
 
     //############################################################################//
     // | UTILITY FUNCTIONS |
@@ -363,16 +515,13 @@ namespace octvis {
     }
 
     int RenderApplication::add_model(std::vector<Vertex>&& vertices) {
-        // Get ID
         int id = m_Models.size();
-        ModelImpl& model = m_Models.emplace_back();
 
-        // Load Vertex Data into Model
+        ModelImpl& model = m_Models.emplace_back();
         model.vertices = std::move(vertices);
         model.begin = m_ModelBuffer->length();
         model.vertex_count = model.vertices.size();
 
-        // Upload Vertex Data to GPU
         m_ModelBuffer->insert(model.vertices.data(), model.vertices.size());
 
         return id;
@@ -475,6 +624,10 @@ namespace octvis {
 
     void RenderApplication::debug_init_cube() {
         add_model("G:\\Dev\\CLion\\MazeVisualisation\\src\\MazeVisualisation\\Res\\Models\\TexturedCube.obj");
+    }
+
+    void RenderApplication::debug_init_sphere() {
+        add_model("G:\\Dev\\BlenderModels\\UVUnitSphere.obj");
     }
 
 } // octvis
