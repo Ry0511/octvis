@@ -300,7 +300,7 @@ namespace octvis {
 
 
         if (ImGui::Begin("Renderer Debug")) {
-            if (ImGui::BeginChild("Lighting Info", {0, 120}, true)) {
+            if (ImGui::BeginChild("Lighting Info", {0, 180}, true)) {
                 for (int i = 0; i < state->active_lights; ++i) {
                     const PointLight& light = state->lights[i];
                     ImGui::Text(
@@ -339,7 +339,7 @@ namespace octvis {
 
         if (ImGui::Begin("Renderer Debug")) {
             std::string str_hash = std::to_string(state.get_state_hash());
-            if (ImGui::BeginChild(str_hash.c_str(), {0, 160}, true, ImGuiWindowFlags_AlwaysAutoResize)) {
+            if (ImGui::BeginChild(str_hash.c_str(), {0, 180}, true, ImGuiWindowFlags_AlwaysAutoResize)) {
                 ImGui::Text("State Hash %llu", state.get_state_hash());
                 ImGui::Text("Draw Hash %llu", state.get_hash());
                 ImGui::Text(

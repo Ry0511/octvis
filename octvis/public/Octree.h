@@ -249,6 +249,14 @@ namespace octvis {
       public:
         void rebuild(const glm::vec3& centre, const float size, int depth = DEFAULT_DEPTH);
 
+        inline glm::vec3 centre() {
+            return m_Root.centre;
+        }
+
+        inline float size() {
+            return m_Root.size;
+        }
+
       public:
         inline bool insert(const T& elem, const glm::vec3& point, float size) {
             Node* node = search(

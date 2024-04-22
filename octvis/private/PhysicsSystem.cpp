@@ -8,14 +8,17 @@
 
 #include "Application.h"
 #include "RenderApplication.h"
-#include "Octree.h"
 #include "Utility.h"
 
 #include <execution>
 
 namespace octvis {
 
-    PhysicsSystem::PhysicsSystem() noexcept: Application("Physics System"), m_FixedUpdateFramerate(60) {
+    PhysicsSystem::PhysicsSystem() noexcept: Application("Physics System"),
+                                             m_FixedUpdateFramerate(60),
+                                             m_OctreeDepth(2),
+                                             m_OctreeSize(1024.0F),
+                                             m_Octree(glm::vec3{0.0F}, 1024.0F, 2) {
 
     }
 
@@ -101,6 +104,9 @@ namespace octvis {
             sc.min = trans.position - half_scale;
             sc.max = trans.position + half_scale;
         }
+
+        m_TreeEntity = m_Registry->create();
+        m_Registry->emplace<LineRenderable>(m_TreeEntity);
     }
 
     void PhysicsSystem::on_fixed_update() noexcept {
@@ -161,11 +167,14 @@ namespace octvis {
 
     void PhysicsSystem::on_update() noexcept {
         if (ImGui::Begin("Physics System")) {
+
+            ImGui::SeparatorText("Physics Timings");
             ImGui::Text("Physics Update      %.4f", m_PhysicsDuration);
             ImGui::Text("Collision Update    %.4f", m_CollisionDuration);
             ImGui::Text("Collision Tests     %llu", m_CollisionTests);
             ImGui::Text("Collisions Resolved %llu", m_CollisionsResolved);
 
+            ImGui::SeparatorText("General");
             if (ImGui::SliderInt(
                     "Fixed Update Framerate",
                     &m_FixedUpdateFramerate,
@@ -176,8 +185,18 @@ namespace octvis {
             )) {
                 m_Timing->fixed = 1.0F / float(m_FixedUpdateFramerate);
             }
-            ImGui::Checkbox("Use Octree?", &m_UseOctree);
-            ImGui::Checkbox("Render Bounding Box?", &m_RenderAsBoundingBox);
+            ImGui::Checkbox("Accelerate Collisions with Octree?", &m_UseOctree);
+            ImGui::Checkbox("Render all as Wireframe Box?", &m_RenderAsBoundingBox);
+
+            ImGui::SeparatorText("Octree Controls");
+            ImGui::SliderFloat("Octree Size", &m_OctreeSize, 128.0F, 2048.0F, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+            ImGui::SliderInt("Octree Depth", &m_OctreeDepth, 0, 4, "%d", ImGuiSliderFlags_AlwaysClamp);
+
+            ImGui::Checkbox("Visualise Entire Octree?", &m_VisualiseOctree);
+            if (!m_VisualiseOctree) {
+                ImGui::Checkbox("Visualise Current Octant?", &m_VisualiseCurrentOctant);
+                ImGui::Checkbox("Visualise Main Octant?", &m_VisualiseMainOctant);
+            }
         }
         ImGui::End();
 
@@ -224,6 +243,77 @@ namespace octvis {
                     }
             );
         }
+
+        LineRenderable& line = m_Registry->get<LineRenderable>(m_TreeEntity);
+        line.vertices.clear();
+        line.enabled = false;
+
+        constexpr auto insert_lines_for_cube = [](
+                LineRenderable& line,
+                const glm::vec3& len,
+                const glm::vec3& centre
+        ) {
+            glm::vec3 pts[]{
+                    centre + glm::vec3(-len.x, -len.y, len.z),
+                    centre + glm::vec3(len.x, -len.y, len.z),
+                    centre + glm::vec3(len.x, -len.y, -len.z),
+                    centre + glm::vec3(-len.x, -len.y, -len.z),
+                    centre + glm::vec3(-len.x, len.y, len.z),
+                    centre + glm::vec3(len.x, len.y, len.z),
+                    centre + glm::vec3(len.x, len.y, -len.z),
+                    centre + glm::vec3(-len.x, len.y, -len.z)
+            };
+            line.vertices.insert(
+                    line.vertices.end(),
+                    {pts[0], pts[1], pts[1], pts[2], pts[2], pts[3], pts[3], pts[0],
+                     pts[4], pts[5], pts[5], pts[6], pts[6], pts[7], pts[7], pts[4],
+                     pts[0], pts[4], pts[1], pts[5], pts[2], pts[6], pts[3], pts[7]}
+            );
+        };
+
+        if (m_VisualiseOctree) {
+
+            m_VisualiseCurrentOctant = false;
+            m_VisualiseMainOctant = false;
+            line.enabled = true;
+            line.vertices.clear();
+
+            m_Octree.for_each(
+                    [&line, insert_lines_for_cube](Node& node) {
+                        insert_lines_for_cube(line, glm::vec3{node.size}, node.centre);
+                    }
+            );
+
+        } else {
+
+            if (m_VisualiseCurrentOctant) {
+                line.enabled = true;
+
+                Camera& cam = m_Registry->get<Camera>(m_Registry->view<Camera>().front());
+                const glm::vec3& pos = cam.get_position();
+                Node* closest = nullptr;
+                float dist = std::numeric_limits<float>{}.max();
+                m_Octree.for_each(
+                        [&pos, &dist, &closest](Node& node) {
+                            float d = glm::distance(pos, node.centre);
+                            if (d < dist) {
+                                closest = &node;
+                                dist = d;
+                            }
+                        }
+                );
+
+                if (closest != nullptr) {
+                    insert_lines_for_cube(line, glm::vec3{closest->size}, closest->centre);
+                }
+            }
+
+            if (m_VisualiseMainOctant) {
+                line.enabled = true;
+                insert_lines_for_cube(line, glm::vec3{m_Octree.size()}, m_Octree.centre());
+            }
+        }
+
     }
 
     //############################################################################//
@@ -324,21 +414,22 @@ namespace octvis {
 
     void PhysicsSystem::resolve_collisions_accelerated() noexcept {
 
-        using Node = Octree<entt::entity>::Node;
-        Octree<entt::entity> tree{glm::vec3{0.0F, 2048.0F, 0.0F}, 2048.0F, 3};
-
         auto group = m_Registry->group<ColliderTag>(entt::get<RigidBody, Transform>);
+
+        // Re-create Tree
+        m_Octree.rebuild(m_OctreeCentre, m_OctreeSize, m_OctreeDepth);
+        Octree<entt::entity>& tree = m_Octree;
 
         constexpr auto get_bounds = [](SphereCollider* sphere, BoxCollider* box) {
             BoxCollider collider{};
 
             if (sphere != nullptr) {
-                collider.min = sphere->centre - (sphere->radius * 2.0F);
-                collider.max = sphere->centre + (sphere->radius * 2.0F);
+                collider.min = sphere->centre - (sphere->radius * 1.5F);
+                collider.max = sphere->centre + (sphere->radius * 1.5F);
 
             } else if (box != nullptr) {
-                collider.min = box->min;
-                collider.max = box->max;
+                collider.min = box->min - 5.0F;
+                collider.max = box->max + 5.0F;
             }
 
             return collider;

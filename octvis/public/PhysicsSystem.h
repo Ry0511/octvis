@@ -8,6 +8,7 @@
 #define OCTVIS_PHYSICSSYSTEM_H
 
 #include "Application.h"
+#include "Octree.h"
 
 namespace octvis {
 
@@ -83,9 +84,21 @@ namespace octvis {
         size_t m_CollisionsResolved;
         int m_FixedUpdateFramerate;
 
+      private: // @off
+        using Node = Octree<entt::entity>::Node;
+        Octree<entt::entity> m_Octree;
+        int                  m_OctreeDepth;
+        float                m_OctreeSize;
+        glm::vec3            m_OctreeCentre;
+      // @on
+
       private:
         bool m_UseOctree = true;
         bool m_RenderAsBoundingBox = false;
+        bool m_VisualiseOctree = false;
+        bool m_VisualiseCurrentOctant = false;
+        bool m_VisualiseMainOctant = false;
+        entt::entity m_TreeEntity = entt::null;
 
       public:
         PhysicsSystem() noexcept;
