@@ -5,6 +5,7 @@
 #include "RenderApplication.h"
 #include "OctreeVisualisationApp.h"
 #include "PhysicsSystem.h"
+#include "glm/gtc/type_ptr.hpp"
 
 #include <algorithm>
 #include <execution>
@@ -55,12 +56,18 @@ class TestApp : public Application {
             PointLight& light = m_Registry->emplace<PointLight>(e);
             light.position = glm::vec3{-5 + rand() % 5, 10.0F, -5 + rand() % 5};
             light.colour = glm::vec3{1.0F, 1.0F, 1.0F};
+            light.colour = glm::vec3{
+                    (10 + (rand() % 90)) * 0.01,
+                    (10 + (rand() % 90)) * 0.01,
+                    (10 + (rand() % 90)) * 0.01
+            };
+
             light.diffuse *= 1.35F;
         }
 
         entt::entity player_collider = m_Registry->create();
 
-        m_Registry->emplace<CameraTag>(player_collider);
+        m_Registry->emplace_or_replace<CameraTag>(player_collider);
         m_Registry->emplace<ColliderTag>(player_collider);
         m_Registry->emplace<RenderableTag>(player_collider);
         m_Registry->emplace<Transform>(player_collider);
@@ -111,19 +118,42 @@ class TestApp : public Application {
             );
         }
 
-        PointLight& pl = m_Registry->get<PointLight>(m_Registry->view<PointLight>().front());
-        pl.position = cam.get_position() + glm::vec3{0, 1.5F, -0.8F};
+        if (ImGui::Begin("Renderer Debug")) {
+            static size_t i;
+            i = 0;
+            if (!ImGui::CollapsingHeader("Lighting Controls")) goto exit;
+            m_Registry->view<PointLight>().each(
+                    [&cam, this](PointLight& light) {
 
-        m_Registry->view<PointLight>().each(
-                [&cam](PointLight& light) {
-                    static size_t index;
-                    index = 0;
-                    srand(index);
-                    ++index;
-                    float radius = -8 + rand() % 16;
-                    light.position = cam.get_position() + glm::vec3{radius, radius * 0.5F, radius};
-                }
-        );
+                        std::string light_name{"Light "};
+                        light_name += std::to_string(i);
+
+                        const glm::vec3& pos = cam.get_position();
+                        if (i == 0) {
+                            light.position = pos + glm::vec3{0, 5.0F, 0};
+                        } else {
+                            light.position = glm::vec3{
+                                pos.x + (8.0F * std::sin((m_Timing->theta + i) * (1.0F / 15.0F))),
+                                pos.y + 2.5F,
+                                pos.z + (8.0F * std::cos((m_Timing->theta + i) * (1.0F / 30.0F)))
+                            };
+                        }
+                        ++i;
+
+                        if (!ImGui::CollapsingHeader(light_name.c_str())) return;
+                        if (ImGui::Button("Reset")) light = PointLight{};
+
+                        ImGui::SliderFloat3("Colour", glm::value_ptr(light.colour), 0.0F, 1.0F);
+                        ImGui::SliderFloat3("Ambient", glm::value_ptr(light.ambient), 0.0F, 1.0F);
+                        ImGui::SliderFloat3("Diffuse", glm::value_ptr(light.diffuse), 0.0F, 1.0F);
+                        ImGui::SliderFloat3("Specular", glm::value_ptr(light.specular), 0.0F, 1.0F);
+                        ImGui::SliderFloat("Shininess", &light.shininess, 0.0F, 256.0F);
+                        ImGui::SliderFloat3("Attenuation", glm::value_ptr(light.attenuation), 0.0F, 1.0F);
+                    }
+            );
+        }
+  exit:
+        ImGui::End();
 
         int width, height;
         SDL_GetWindowSize(m_Window->handle, &width, &height);
@@ -135,13 +165,12 @@ class TestApp : public Application {
         if (InputSystem::is_key_pressed(SDLK_1)) speed = 100.0F;
         float vel = speed * m_Timing->delta;
 
+        glm::vec3 pos = cam.get_position();
+
         if (InputSystem::is_key_pressed(SDLK_w)) cam.translate_forward(vel);
         if (InputSystem::is_key_pressed(SDLK_s)) cam.translate_forward(-vel);
         if (InputSystem::is_key_pressed(SDLK_a)) cam.translate_horizontal(-vel);
         if (InputSystem::is_key_pressed(SDLK_d)) cam.translate_horizontal(vel);
-
-        glm::vec3 pos = cam.get_position();
-        cam.set_position(pos);
 
         // Capture Mouse
         static bool is_relative_mode = false;

@@ -300,7 +300,7 @@ namespace octvis {
 
 
         if (ImGui::Begin("Renderer Debug")) {
-            if (ImGui::BeginChild("Lighting Info", {0, 180}, true)) {
+            if (ImGui::CollapsingHeader("Lighting")) {
                 for (int i = 0; i < state->active_lights; ++i) {
                     const PointLight& light = state->lights[i];
                     ImGui::Text(
@@ -323,7 +323,6 @@ namespace octvis {
                     );
                 }
             }
-            ImGui::EndChild();
         }
         ImGui::End();
 
@@ -338,8 +337,8 @@ namespace octvis {
         OCTVIS_ASSERT(instance_data.size() > 0, "Rendering 0 instances?");
 
         if (ImGui::Begin("Renderer Debug")) {
-            std::string str_hash = std::to_string(state.get_state_hash());
-            if (ImGui::BeginChild(str_hash.c_str(), {0, 180}, true, ImGuiWindowFlags_AlwaysAutoResize)) {
+            if (ImGui::CollapsingHeader("Draw Commands")) {
+                std::string str_hash = std::to_string(state.get_state_hash());
                 ImGui::Text("State Hash %llu", state.get_state_hash());
                 ImGui::Text("Draw Hash %llu", state.get_hash());
                 ImGui::Text(
@@ -363,7 +362,6 @@ namespace octvis {
                     );
                 }
             }
-            ImGui::EndChild();
         }
         ImGui::End();
 
