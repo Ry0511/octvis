@@ -30,7 +30,7 @@ class TestApp : public Application {
         m_Registry->emplace<CameraTag>(m_CameraEntity);
         Camera& camera = m_Registry->emplace<Camera>(m_CameraEntity);
 
-        camera.set_projection(90.0F, 0.1F, 1000.0F, 800.0F / 600.0F);
+        camera.set_projection(90.0F, 0.01F, 2048.0F, 800.0F / 600.0F);
         camera.set_position(glm::vec3{0, 0, -5});
         camera.look_at(glm::vec3{0, 0, 0});
 
