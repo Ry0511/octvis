@@ -133,9 +133,9 @@ class TestApp : public Application {
                             light.position = pos + glm::vec3{0, 5.0F, 0};
                         } else {
                             light.position = glm::vec3{
-                                pos.x + (8.0F * std::sin((m_Timing->theta + i) * (1.0F / 15.0F))),
-                                pos.y + 2.5F,
-                                pos.z + (8.0F * std::cos((m_Timing->theta + i) * (1.0F / 30.0F)))
+                                    pos.x + (8.0F * std::sin((m_Timing->theta + i) * (1.0F / 15.0F))),
+                                    pos.y + 2.5F,
+                                    pos.z + (8.0F * std::cos((m_Timing->theta + i) * (1.0F / 30.0F)))
                             };
                         }
                         ++i;

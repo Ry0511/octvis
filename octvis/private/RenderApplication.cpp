@@ -158,6 +158,8 @@ namespace octvis {
 
         auto group = m_Registry->group<RenderableTag, Renderable, ModelMatrix>(entt::get<Transform>);
 
+        if (group.size() == 0) return;
+
         group.sort<Renderable>(
                 [](const Renderable& lhs, const Renderable& rhs) {
 
@@ -170,8 +172,6 @@ namespace octvis {
                     return lhs.get_state_hash() < rhs.get_state_hash();
                 }
         );
-
-        if (group.size() == 0) return;
 
         // This is trivially made parallel.
         start_timer();

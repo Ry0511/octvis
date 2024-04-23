@@ -32,7 +32,7 @@ namespace octvis {
 
     void PhysicsSystem::on_start() noexcept {
 
-        constexpr size_t ENTITY_COUNT = 16;
+        constexpr size_t ENTITY_COUNT = 32;
         for (int i = 0; i < ENTITY_COUNT; ++i) {
             entt::entity e = m_Registry->create();
 
@@ -166,6 +166,8 @@ namespace octvis {
     }
 
     void PhysicsSystem::on_update() noexcept {
+        srand(m_Timing->delta_ticks + m_Timing->fixed_ticks);
+
         if (ImGui::Begin("Physics System")) {
 
             ImGui::SeparatorText("Physics Timings");
