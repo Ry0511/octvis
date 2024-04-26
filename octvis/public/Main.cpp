@@ -54,13 +54,35 @@ class TestApp : public Application {
             entt::entity e = m_Registry->create();
             m_Registry->emplace<LightTag>(e);
             PointLight& light = m_Registry->emplace<PointLight>(e);
-            light.position = glm::vec3{-5 + rand() % 5, 10.0F, -5 + rand() % 5};
-            light.colour = glm::vec3{1.0F, 1.0F, 1.0F};
-            light.colour = glm::vec3{
-                    (10 + (rand() % 90)) * 0.01,
-                    (10 + (rand() % 90)) * 0.01,
-                    (10 + (rand() % 90)) * 0.01
-            };
+
+            light.specular = glm::vec3{1.0F};
+            light.shininess = 256.0F;
+
+            switch ((i+1) % 4) {
+                case 0:
+                    light.colour = glm::vec3{1.0F};
+                    light.attenuation = glm::vec3{0.8F, 0.1F, 0.0F};
+                    break;
+                case 1:
+                    light.colour = glm::vec3{1.0F, 0.0F, 0.0F};
+                    light.attenuation = glm::vec3{1.2F, 0.3F, 0.0F};
+                    break;
+                case 2:
+                    light.colour = glm::vec3{0.0F, 1.0F, 0.0F};
+                    light.attenuation = glm::vec3{1.8F, 0.3F, 0.0F};
+                    break;
+                case 3:
+                    light.colour = glm::vec3{0.0F, 0.0F, 1.0F};
+                    light.attenuation = glm::vec3{0.8F, 0.2F, 0.0F};
+                    break;
+                default:
+                    light.colour = glm::vec3{
+                            (30 + (rand() % 90)) * 0.01,
+                            (30 + (rand() % 90)) * 0.01,
+                            (30 + (rand() % 90)) * 0.01
+                    };
+                    break;
+            }
 
             light.diffuse *= 1.35F;
         }
