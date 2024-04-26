@@ -190,6 +190,12 @@ namespace octvis {
             ImGui::Checkbox("Accelerate Collisions with Octree?", &m_UseOctree);
             ImGui::Checkbox("Render all as Wireframe Box?", &m_RenderAsBoundingBox);
 
+            m_Registry->view<CameraTag, LineRenderable>().each(
+                    [](LineRenderable& line) {
+                        ImGui::Checkbox("Render Collision Lines?", &line.enabled);
+                    }
+            );
+
             ImGui::SeparatorText("Octree Controls");
             ImGui::SliderFloat("Octree Size", &m_OctreeSize, 128.0F, 2048.0F, "%.2f", ImGuiSliderFlags_AlwaysClamp);
             ImGui::SliderInt("Octree Depth", &m_OctreeDepth, 0, 4, "%d", ImGuiSliderFlags_AlwaysClamp);

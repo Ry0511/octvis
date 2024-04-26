@@ -108,52 +108,25 @@ class TestApp : public Application {
                         const glm::vec3 size{0.25F, 1.0F, 0.25F};
                         box.min = (tr.position - glm::vec3{0, 0.5F, 0}) - size;
                         box.max = (tr.position - glm::vec3{0, 0.5F, 0}) + size;
-
-                        if (ImGui::Begin("Debug")) {
-                            ImGui::Checkbox("Render Collision Lines?", &line.enabled);
-                        }
-                        ImGui::End();
-
                     }
             );
         }
 
-        if (ImGui::Begin("Renderer Debug")) {
-            static size_t i;
-            i = 0;
-            if (!ImGui::CollapsingHeader("Lighting Controls")) goto exit;
-            m_Registry->view<PointLight>().each(
-                    [&cam, this](PointLight& light) {
+        {
+            int idx = 0;
+            auto pl_view = m_Registry->view<PointLight>();
+            size_t count = pl_view.size();
 
-                        std::string light_name{"Light "};
-                        light_name += std::to_string(i);
-
-                        const glm::vec3& pos = cam.get_position();
-                        if (i == 0) {
-                            light.position = pos + glm::vec3{0, 5.0F, 0};
-                        } else {
-                            light.position = glm::vec3{
-                                    pos.x + (8.0F * std::sin((m_Timing->theta + i) * (1.0F / 15.0F))),
-                                    pos.y + 2.5F,
-                                    pos.z + (8.0F * std::cos((m_Timing->theta + i) * (1.0F / 30.0F)))
-                            };
-                        }
-                        ++i;
-
-                        if (!ImGui::CollapsingHeader(light_name.c_str())) return;
-                        if (ImGui::Button("Reset")) light = PointLight{};
-
-                        ImGui::SliderFloat3("Colour", glm::value_ptr(light.colour), 0.0F, 1.0F);
-                        ImGui::SliderFloat3("Ambient", glm::value_ptr(light.ambient), 0.0F, 1.0F);
-                        ImGui::SliderFloat3("Diffuse", glm::value_ptr(light.diffuse), 0.0F, 1.0F);
-                        ImGui::SliderFloat3("Specular", glm::value_ptr(light.specular), 0.0F, 1.0F);
-                        ImGui::SliderFloat("Shininess", &light.shininess, 0.0F, 256.0F);
-                        ImGui::SliderFloat3("Attenuation", glm::value_ptr(light.attenuation), 0.0F, 1.0F);
+            pl_view.each( // All lights orbit around the camera
+                    [this, &cam, count, &idx](PointLight& pl) {
+                        constexpr float RADIUS = 32.0F;
+                        float theta = 2.0F * 3.1415F * (float) idx / count + m_Timing->theta * 0.25F;
+                        glm::vec3 offset = RADIUS * glm::vec3(std::cos(theta), 0.0F, std::sin(theta));
+                        pl.position = cam.get_position() + offset;
+                        ++idx;
                     }
             );
         }
-  exit:
-        ImGui::End();
 
         int width, height;
         SDL_GetWindowSize(m_Window->handle, &width, &height);
@@ -162,7 +135,9 @@ class TestApp : public Application {
 
         // Moving Around
         float speed = 20.0F;
-        if (InputSystem::is_key_pressed(SDLK_1)) speed = 100.0F;
+        if (InputSystem::is_key_pressed(SDLK_2)) speed = 100.0F;
+        if (InputSystem::is_key_pressed(SDLK_3)) speed = 200.0F;
+        if (InputSystem::is_key_pressed(SDLK_4)) speed = 400.0F;
         float vel = speed * m_Timing->delta;
 
         glm::vec3 pos = cam.get_position();
@@ -198,31 +173,79 @@ class TestApp : public Application {
 
         if (InputSystem::is_key_released(SDLK_r)) cam.look_at(glm::vec3{0});
 
-        if (ImGui::Begin("Debug")) {
-            ImGui::Text("W => %s", InputSystem::is_key_pressed(SDLK_w) ? "Pressed" : "Released");
-            ImGui::Text("A => %s", InputSystem::is_key_pressed(SDLK_a) ? "Pressed" : "Released");
-            ImGui::Text("S => %s", InputSystem::is_key_pressed(SDLK_s) ? "Pressed" : "Released");
-            ImGui::Text("D => %s", InputSystem::is_key_pressed(SDLK_d) ? "Pressed" : "Released");
+        if (ImGui::Begin("Application")) {
 
-            auto mvel = InputSystem::get_mouse_vel();
-            ImGui::Text("MVel => ( %.4f, %.4f )", mvel.x, mvel.y);
+            struct Action {
+                const char* key;
+                const char* action;
 
-            glm::vec3 position = cam.get_position();
-            glm::vec3 rotation = cam.get_rotate();
-            ImGui::Text("Position ( %.3f, %.3f, %.3f )", pos.x, pos.y, pos.z);
-            ImGui::Text("YPR      ( %.3f, %.3f, %.3f )", rotation.x, rotation.y, rotation.z);
-        }
-        ImGui::End();
+                constexpr Action(const char* k, const char* a) : key(k), action(a) {}
+            };
 
-        if (ImGui::Begin("Application Timings")) {
-            ImGui::Text("Framerate          %0f", 1.0F / m_Timing->delta);
-            ImGui::Text("Theta              %2f", m_Timing->theta);
-            ImGui::Text("Delta              %4f", m_Timing->delta);
-            ImGui::Text("Fixed              %4f", m_Timing->fixed);
-            ImGui::Text("Delta Ticks        %llu", m_Timing->delta_ticks);
-            ImGui::Text("Fixed Ticks        %llu", m_Timing->fixed_ticks);
-            ImGui::Text("Fixed Update Theta %4f", m_Timing->fixed_update_total_time);
-            ImGui::Text("Delta Update Theta %4f", m_Timing->update_total_time);
+            constexpr Action ACTIONS[]{
+                    {"W",   "Move Forward"},
+                    {"A",   "Move Left"},
+                    {"S",   "Move Backward"},
+                    {"D",   "Move Right"},
+
+                    {"",    ""},
+                    {"R",   "Force Camera to look at Z 0.0"},
+                    {"T",   "Randomise Object Positions (Spheres & Boxes)"},
+                    {"ESC", "Start/Stop Capturing the mouse; Locks to main window and hides."},
+                    {"1",   "Locks Movement into XZ-Plane"},
+                    {"2",   "Holding changes movement speed to 5x"},
+                    {"3",   "Holding changes movement speed to 10x"},
+                    {"4",   "Holding changes movement speed to 20x"},
+            };
+
+
+            if (ImGui::CollapsingHeader("Controls") && ImGui::BeginTable("Inputs", 2, ImGuiTableFlags_SizingFixedFit)) {
+                constexpr float COL0_WIDTH = 50.0F;
+                ImGui::TableSetupColumn("col1", ImGuiTableColumnFlags_None, COL0_WIDTH);
+                ImGui::TableNextRow(ImGuiTableRowFlags_Headers);
+                ImGui::TableNextColumn();
+                ImGui::Text("Key");
+                ImGui::TableNextColumn();
+                ImGui::Text("Action");
+
+                for (int i = 0; i < sizeof(ACTIONS) / sizeof(Action); ++i) {
+                    const Action& action = ACTIONS[i];
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%s", action.key);
+                    ImGui::TableNextColumn();
+                    ImGui::PushTextWrapPos(ImGui::GetWindowWidth() - COL0_WIDTH);
+                    ImGui::Text("%s", action.action);
+                    ImGui::PopTextWrapPos();
+                }
+                ImGui::EndTable();
+            }
+
+            ImGui::SeparatorText("Update Timings");
+
+            static int average_ticks = 0;
+            static double average_fps = 0.0;
+            static double average_theta = 0.0;
+
+            if (average_theta > 30.0) {
+                average_ticks = 0;
+                average_fps = 0.0;
+                average_theta = 0.0;
+            }
+
+            ++average_ticks;
+            average_theta += m_Timing->delta;
+            average_fps = double(average_ticks) / average_theta;
+
+            ImGui::Text("Framerate (Single)  %.0f", 1.0F / m_Timing->delta);
+            ImGui::Text("Framerate (Average) %.0f", average_fps);
+            ImGui::Text("Theta               %.2f", m_Timing->theta);
+            ImGui::Text("Delta               %.4f", m_Timing->delta);
+            ImGui::Text("Fixed               %.4f", m_Timing->fixed);
+            ImGui::Text("Delta Ticks         %llu", m_Timing->delta_ticks);
+            ImGui::Text("Fixed Ticks         %llu", m_Timing->fixed_ticks);
+            ImGui::Text("Fixed Update Theta  %.4f", m_Timing->fixed_update_total_time);
+            ImGui::Text("Delta Update Theta  %.4f", m_Timing->update_total_time);
         }
         ImGui::End();
 

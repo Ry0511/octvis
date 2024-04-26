@@ -259,7 +259,7 @@ namespace octvis {
         render_lines();
         float line_render = elapsed();
 
-        if (ImGui::Begin("Application Timings")) {
+        if (ImGui::Begin("Application")) {
             ImGui::SeparatorText("Render Application");
             ImGui::Text("Model Calculation Duration %.4f", model_calc_duration);
             ImGui::Text("Renderable Processing Duration %.4f", renderable_process_duration);
@@ -298,34 +298,6 @@ namespace octvis {
                 }
         );
 
-
-        if (ImGui::Begin("Renderer Debug")) {
-            if (ImGui::CollapsingHeader("Lighting")) {
-                for (int i = 0; i < state->active_lights; ++i) {
-                    const PointLight& light = state->lights[i];
-                    ImGui::Text(
-                            "Light %u\n\t%s",
-                            i,
-                            std::format(
-                                    "{:>3.2f}, {:>3.2f}, {:>3.2f}\n\t"
-                                    "{:>3.2f}, {:>3.2f}, {:>3.2f}\n\t"
-                                    "{:>3.2f}, {:>3.2f}, {:>3.2f}\n\t"
-                                    "{:>3.2f}, {:>3.2f}, {:>3.2f}\n\t"
-                                    "{:>3.2f}, {:>3.2f}, {:>3.2f} ({:.2f})\n\t"
-                                    "{:>3.2f}, {:>3.2f}, {:>3.2f}\n\t",
-                                    light.position.x, light.position.y, light.position.z,
-                                    light.colour.x, light.colour.y, light.colour.z,
-                                    light.ambient.x, light.ambient.y, light.ambient.z,
-                                    light.diffuse.x, light.diffuse.y, light.diffuse.z,
-                                    light.specular.x, light.specular.y, light.specular.z, light.shininess,
-                                    light.attenuation.x, light.attenuation.y, light.attenuation.z
-                            ).c_str()
-                    );
-                }
-            }
-        }
-        ImGui::End();
-
         m_UniformBuffer->release_mapping();
     }
 
@@ -336,13 +308,13 @@ namespace octvis {
     ) noexcept {
         OCTVIS_ASSERT(instance_data.size() > 0, "Rendering 0 instances?");
 
-        if (ImGui::Begin("Renderer Debug")) {
+        if (ImGui::Begin("Application")) {
             if (ImGui::CollapsingHeader("Draw Commands")) {
                 std::string str_hash = std::to_string(state.get_state_hash());
                 ImGui::Text("State Hash %llu", state.get_state_hash());
                 ImGui::Text("Draw Hash %llu", state.get_hash());
                 ImGui::Text(
-                        "Instance Data %llu as bytes %llu",
+                        "Instance Data %llu (%llu bytes)",
                         instance_data.size(),
                         instance_data.size() * sizeof(InstanceData)
                 );
@@ -350,16 +322,18 @@ namespace octvis {
                 for (int i = 0; i < commands.size(); ++i) {
                     const MultiDrawCommand& cmd = commands[i];
                     if (cmd.instance_count == 0) continue;
+                    ImGui::PushTextWrapPos(ImGui::GetWindowWidth() * 0.9F);
                     ImGui::Text(
                             "%s",
                             std::format(
-                                    "First {:>4}, Count {:>4}, Instance Count {:>4}, Base Instance {:>4}",
+                                    "First {}, Count {}, Instance Count {}, Base Instance {}",
                                     cmd.first,
                                     cmd.count,
                                     cmd.instance_count,
                                     cmd.base_instance
                             ).c_str()
                     );
+                    ImGui::PopTextWrapPos();
                 }
             }
         }
