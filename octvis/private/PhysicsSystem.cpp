@@ -419,7 +419,7 @@ namespace octvis {
         auto group = m_Registry->group<ColliderTag>(entt::get<RigidBody, Transform>);
 
         // Re-create Tree
-        m_OctreeCentre = glm::vec3{0.0F, m_OctreeSize * 0.5F, 0.0F};
+        m_OctreeCentre = glm::vec3{0.0F, m_OctreeSize, 0.0F};
         m_Octree.rebuild(m_OctreeCentre, m_OctreeSize, m_OctreeDepth);
         Octree<entt::entity>& tree = m_Octree;
 

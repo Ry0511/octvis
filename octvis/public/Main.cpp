@@ -106,8 +106,8 @@ class TestApp : public Application {
                     [&cam](LineRenderable& line, Transform& tr, BoxCollider& box) {
                         tr.position = cam.get_position();
                         const glm::vec3 size{0.25F, 1.0F, 0.25F};
-                        box.min = tr.position - size;
-                        box.max = tr.position + size;
+                        box.min = (tr.position - glm::vec3{0, 0.5F, 0}) - size;
+                        box.max = (tr.position - glm::vec3{0, 0.5F, 0}) + size;
 
                         if (ImGui::Begin("Debug")) {
                             ImGui::Checkbox("Render Collision Lines?", &line.enabled);
