@@ -122,6 +122,7 @@ class TestApp : public Application {
         ImGui::DockSpaceOverViewport(nullptr, ImGuiDockNodeFlags_PassthruCentralNode);
 
         Camera& cam = m_Registry->get<Camera>(m_CameraEntity);
+        cam.set_projection(90.0F, 0.01F, 2048.0F, float(m_Window->width) / float(m_Window->height));
 
         {
             m_Registry->view<CameraTag, LineRenderable, Transform, BoxCollider>().each(
