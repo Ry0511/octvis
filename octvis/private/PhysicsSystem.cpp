@@ -67,7 +67,7 @@ namespace octvis {
             sc.radius = 1.0F * s;
         }
 
-        for (int i = 0; i < ENTITY_COUNT; ++i) {
+        for (int i = 0; i < ENTITY_COUNT * 2; ++i) {
             entt::entity e = m_Registry->create();
 
             m_Registry->emplace<PhysicsTag>(e);

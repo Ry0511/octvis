@@ -595,11 +595,11 @@ namespace octvis {
     }
 
     void RenderApplication::debug_init_cube() {
-        add_model("G:\\Dev\\CLion\\MazeVisualisation\\src\\MazeVisualisation\\Res\\Models\\TexturedCube.obj");
+        add_model("resources/TexturedCube.obj");
     }
 
     void RenderApplication::debug_init_sphere() {
-        add_model("G:\\Dev\\BlenderModels\\UVUnitSphere.obj");
+        add_model("resources/UVUnitSphere.obj");
     }
 
 } // octvis
